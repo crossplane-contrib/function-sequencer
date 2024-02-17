@@ -1,0 +1,27 @@
+apiVersion: nop.crossplane.io/v1alpha1
+kind: NopResource
+metadata:
+  annotations:
+    crossplane.io/external-name: foo
+    crossplane.io/composition-resource-name: first-resource
+  name: first
+spec:
+  forProvider:
+    conditionAfter:
+      - conditionStatus: "True"
+        conditionType: Ready
+        time: 1s
+      - conditionStatus: "False"
+        conditionType: Ready
+        time: 0s
+status:
+  atProvider: {}
+  conditions:
+    - lastTransitionTime: "2024-02-17T11:56:27Z"
+      reason: ReconcileSuccess
+      status: "True"
+      type: Synced
+    - lastTransitionTime: "2024-02-17T11:56:28Z"
+      reason: ""
+      status: "True"
+      type: Ready

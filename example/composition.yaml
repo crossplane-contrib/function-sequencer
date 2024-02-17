@@ -8,12 +8,69 @@ spec:
     kind: XR
   mode: Pipeline
   pipeline:
-  - step: run-the-template
+  - step: patch-and-transform
+    functionRef:
+      name: function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+        - name: first-resource
+          base:
+            apiVersion: nop.crossplane.io/v1alpha1
+            kind: NopResource
+            spec:
+              forProvider:
+                conditionAfter:
+                  - time: 5s
+                    conditionType: Ready
+                    conditionStatus: "False"
+                  - time: 10s
+                    conditionType: Ready
+                    conditionStatus: "True"
+                  # We should not delete the dependent resources if this turns back to unready.
+                  - time: 30s
+                    conditionType: Ready
+                    conditionStatus: "False"
+                  - time: 90s
+                    conditionType: Ready
+                    conditionStatus: "True"
+        - name: second-resource
+          base:
+            apiVersion: nop.crossplane.io/v1alpha1
+            kind: NopResource
+            spec:
+              forProvider:
+                conditionAfter:
+                  - time: 5s
+                    conditionType: Ready
+                    conditionStatus: "False"
+                  - time: 10s
+                    conditionType: Ready
+                    conditionStatus: "True"
+        - name: third-resource
+          base:
+            apiVersion: nop.crossplane.io/v1alpha1
+            kind: NopResource
+            spec:
+              forProvider:
+                conditionAfter:
+                  - time: 5s
+                    conditionType: Ready
+                    conditionStatus: "False"
+                  - time: 10s
+                    conditionType: Ready
+                    conditionStatus: "True"
+  - step: detect-readiness
+    functionRef:
+      name: function-auto-ready
+  - step: sequence-creation
     functionRef:
       name: function-sequencer
     input:
       apiVersion: template.fn.crossplane.io/v1beta1
       kind: Input
       sequence:
-        - foo
-        - bar
+      - first-resource
+      - second-resource
+      - third-resource
