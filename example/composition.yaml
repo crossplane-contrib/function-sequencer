@@ -14,4 +14,6 @@ spec:
     input:
       apiVersion: template.fn.crossplane.io/v1beta1
       kind: Input
-      example: "Hello world"
+      sequence:
+        - foo
+        - bar

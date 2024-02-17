@@ -31,8 +31,8 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 	}
 
 	// TODO: Add your Function logic here!
-	response.Normalf(rsp, "I was run with input %q!", in.Example)
-	f.log.Info("I was run!", "input", in.Example)
+	response.Normalf(rsp, "I was run with input %q!", in.Sequence)
+	f.log.Info("I was run!", "input", in.Sequence)
 
 	return rsp, nil
 }
