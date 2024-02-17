@@ -5,6 +5,7 @@
 package v1beta1
 
 import (
+	"github.com/crossplane/function-sdk-go/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -22,5 +23,5 @@ type Input struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Sequence []string `json:"sequence"`
+	Sequence []resource.Name `json:"sequence"`
 }
