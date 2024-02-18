@@ -70,7 +70,10 @@ spec:
     input:
       apiVersion: template.fn.crossplane.io/v1beta1
       kind: Input
-      sequence:
-      - first-resource
-      - second-resource
-      - third-resource
+      rules:
+        - sequence:
+          - first-resource
+          - second-resource
+        - sequence:
+          - first-resource
+          - third-resource

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/crossplane/function-sdk-go/resource"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -31,9 +32,6 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 		return rsp, nil
 	}
 
-	response.Normalf(rsp, "I was run with input %q!", in.Sequence)
-	f.log.Info("I was run!", "input", in.Sequence)
-
 	//  Get the desired composed resources from the request.
 	desiredComposed, err := request.GetDesiredComposedResources(req)
 	if err != nil {
@@ -47,22 +45,32 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 		return rsp, nil
 	}
 
-	for i, r := range in.Sequence {
-		if i == 0 {
-			// We don't need to do anything for the first resource in the sequence.
-			continue
-		}
-		if _, created := observedComposed[r]; created {
-			// We've already created this resource, so we don't need to do anything.
-			// We only sequence creation of resources that don't exist yet.
-			continue
-		}
-		for _, before := range in.Sequence[:i] {
-			if b, ok := desiredComposed[before]; !ok || b.Ready != resource.ReadyTrue {
-				// A resource that should exist before this one is not in the desired list, or it is not ready yet.
-				// So, we should not create the resource waiting for it yet.
-				delete(desiredComposed, r)
-				break
+	sequences := make([][]resource.Name, 0, len(in.Rules))
+	for _, rule := range in.Rules {
+		sequences = append(sequences, rule.Sequence)
+	}
+
+	for _, sequence := range sequences {
+		for i, r := range sequence {
+			if i == 0 {
+				// We don't need to do anything for the first resource in the sequence.
+				continue
+			}
+			if _, created := observedComposed[r]; created {
+				// We've already created this resource, so we don't need to do anything.
+				// We only sequence creation of resources that don't exist yet.
+				continue
+			}
+			for _, before := range sequence[:i] {
+				if b, ok := desiredComposed[before]; !ok || b.Ready != resource.ReadyTrue {
+					// A resource that should exist before this one is not in the desired list, or it is not ready yet.
+					// So, we should not create the resource waiting for it yet.
+					msg := fmt.Sprintf("Delaying creation of resource %q because %q is not ready or does not exist yet", r, before)
+					response.Normal(rsp, msg)
+					f.log.Info(msg)
+					delete(desiredComposed, r)
+					break
+				}
 			}
 		}
 	}

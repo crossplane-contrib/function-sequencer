@@ -33,14 +33,20 @@ spec:
             type: string
           metadata:
             type: object
-          sequence:
+          rules:
             items:
-              description: A Name uniquely identifies a composed resource within a
-                Composition Function pipeline. It's not the resource's metadata.name.
-              type: string
+              properties:
+                sequence:
+                  description: 'TODO: InferFromUsages InferFromUsages bool            `json:"inferFromUsages,omitempty"`'
+                  items:
+                    description: A Name uniquely identifies a composed resource within
+                      a Composition Function pipeline. It's not the resource's metadata.name.
+                    type: string
+                  type: array
+              type: object
             type: array
         required:
-        - sequence
+        - rules
         type: object
     served: true
     storage: true
