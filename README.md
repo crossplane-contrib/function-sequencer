@@ -1,44 +1,40 @@
-# function-template-go
-[![CI](https://github.com/crossplane/function-template-go/actions/workflows/ci.yml/badge.svg)](https://github.com/crossplane/function-template-go/actions/workflows/ci.yml)
+# function-sequencer
 
-A template for writing a [composition function][functions] in [Go][go].
+Function Sequencer is a Crossplane function that enables Composition authors to define sequencing rules delaying the
+creation of resources until other resources are ready.
 
-To learn how to use this template:
+For example, the pipeline step below, will ensure that `second-resource` and `third-resource` not to be created until
+the `first-resource` is ready.
 
-* [Follow the guide to writing a composition function in Go][function guide]
-* [Learn about how composition functions work][functions]
-* [Read the function-sdk-go package documentation][package docs]
-
-If you just want to jump in and get started:
-
-1. Replace `function-template-go` with your function in `go.mod`,
-   `package/crossplane.yaml`, and any Go imports. (You can also do this
-   automatically by running the `./init.sh <function-name>` script.)
-1. Update `input/v1beta1/` to reflect your desired input (and run `go generate`)
-1. Add your logic to `RunFunction` in `fn.go`
-1. Add tests for your logic in `fn_test.go`
-1. Update this file, `README.md`, to be about your function!
-
-This template uses [Go][go], [Docker][docker], and the [Crossplane CLI][cli] to
-build functions.
-
-```shell
-# Run code generation - see input/generate.go
-$ go generate ./...
-
-# Run tests - see fn_test.go
-$ go test ./...
-
-# Build the function's runtime image - see Dockerfile
-$ docker build . --tag=runtime
-
-# Build a function package - see package/crossplane.yaml
-$ crossplane xpkg build -f package --embed-runtime-image=runtime
+```yaml
+  - step: sequence-creation
+    functionRef:
+      name: function-sequencer
+    input:
+      apiVersion: template.fn.crossplane.io/v1beta1
+      kind: Input
+      rules:
+        - sequence:
+          - first-resource
+          - second-resource
+        - sequence:
+          - first-resource
+          - third-resource
 ```
 
-[functions]: https://docs.crossplane.io/latest/concepts/composition-functions
-[go]: https://go.dev
-[function guide]: https://docs.crossplane.io/knowledge-base/guides/write-a-composition-function-in-go
-[package docs]: https://pkg.go.dev/github.com/crossplane/function-sdk-go
-[docker]: https://www.docker.com
-[cli]: https://docs.crossplane.io/latest/cli
+See `example/composition.yaml` for a complete example.
+
+## Installation
+
+Currently it could be installed as follows:
+
+```
+apiVersion: pkg.crossplane.io/v1beta1
+kind: Function
+metadata:
+  name: function-sequencer
+spec:
+  package: xpkg.upbound.io/hasan/function-sequencer:v0.0.3
+```
+
+
