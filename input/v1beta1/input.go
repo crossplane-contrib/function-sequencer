@@ -5,15 +5,17 @@
 package v1beta1
 
 import (
-	"github.com/crossplane/function-sdk-go/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/crossplane/function-sdk-go/resource"
 )
 
 // This isn't a custom resource, in the sense that we never install its CRD.
 // It is a KRM-like object, so we generate a CRD to describe its schema.
 
+// SequencingRule is a rule that describes a sequence of resources.
 type SequencingRule struct {
-	// TODO: InferFromUsages
+	// TODO: Should we add a way to infer sequencing from usages? e.g. InferFromUsages: true
 	// InferFromUsages bool            `json:"inferFromUsages,omitempty"`
 	Sequence []resource.Name `json:"sequence,omitempty"`
 }
@@ -26,5 +28,6 @@ type Input struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// Rules is a list of rules that describe sequences of resources.
 	Rules []SequencingRule `json:"rules"`
 }
