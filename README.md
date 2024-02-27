@@ -26,15 +26,4 @@ See `example/composition.yaml` for a complete example.
 
 ## Installation
 
-Currently it could be installed as follows:
-
-```
-apiVersion: pkg.crossplane.io/v1beta1
-kind: Function
-metadata:
-  name: function-sequencer
-spec:
-  package: xpkg.upbound.io/hasan/function-sequencer:v0.0.3
-```
-
-
+It can be installed as follows from the Upbound marketplace: https://marketplace.upbound.io/functions/crossplane-contrib/function-sequencer
