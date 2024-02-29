@@ -11,7 +11,7 @@ the `first-resource` is ready.
     functionRef:
       name: function-sequencer
     input:
-      apiVersion: template.fn.crossplane.io/v1beta1
+      apiVersion: sequencer.fn.crossplane.io/v1beta1
       kind: Input
       rules:
         - sequence:
