@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.13.0
-  name: inputs.template.fn.crossplane.io
+  name: inputs.sequencer.fn.crossplane.io
 spec:
-  group: template.fn.crossplane.io
+  group: sequencer.fn.crossplane.io
   names:
     categories:
     - crossplane
