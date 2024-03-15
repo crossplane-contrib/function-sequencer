@@ -3,4 +3,15 @@ apiVersion: meta.pkg.crossplane.io/v1beta1
 kind: Function
 metadata:
   name: function-sequencer
+  annotations:
+    meta.crossplane.io/maintainer: Crossplane Maintainers <info@crossplane.io>
+    meta.crossplane.io/source: github.com/crossplane-contrib/function-sequencer
+    meta.crossplane.io/license: Apache-2.0
+    meta.crossplane.io/description: |
+      A composition function to define sequencing rules delaying the creation of resources until other resources are ready.
+    meta.crossplane.io/readme: |
+      This composition function enables defining sequencing rules to delay
+      the creation of resources until other resources are ready. It is useful
+      for defining ordering between resources to optimize the provisioning flow
+      when eventual consistency is not optimal.
 spec: {}
