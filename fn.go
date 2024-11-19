@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
@@ -62,10 +63,38 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 				continue
 			}
 			for _, before := range sequence[:i] {
-				if b, ok := desiredComposed[before]; !ok || b.Ready != resource.ReadyTrue {
-					// A resource that should exist before this one is not in the desired list, or it is not ready yet.
-					// So, we should not create the resource waiting for it yet.
-					msg := fmt.Sprintf("Delaying creation of resource %q because %q is not ready or does not exist yet", r, before)
+				re := regexp.MustCompile(string(before))
+				keys := []resource.Name{}
+				for k, _ := range desiredComposed {
+					if re.MatchString(string(k)) {
+						keys = append(keys, k)
+					}
+				}
+
+				// We'll treat everything the same way adding all resources to the keys slice
+				// and then checking if they are ready.
+				desired := len(keys)
+				readyResources := 0
+				for _, k := range keys {
+					if b, ok := desiredComposed[k]; ok && b.Ready == resource.ReadyTrue {
+						// resource is ready, add it to the counter
+						readyResources++
+					}
+				}
+
+				if desired == 0 || desired != readyResources {
+					// no resource created
+					msg := fmt.Sprintf("Delaying creation of resource %q because %q does not exist yet", r, before)
+					if desired > 0 {
+						// provide a nicer message if there are resources.
+						msg = fmt.Sprintf(
+							"Delaying creation of resource %q because %q is not fully ready (%d of %d)",
+							r,
+							before,
+							readyResources,
+							desired,
+						)
+					}
 					response.Normal(rsp, msg)
 					f.log.Info(msg)
 					delete(desiredComposed, r)
