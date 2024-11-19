@@ -7,12 +7,21 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	fnv1beta1 "github.com/crossplane/function-sdk-go/proto/v1beta1"
+	"github.com/crossplane/function-sdk-go/resource"
+	"github.com/crossplane/function-sdk-go/response"
+	"github.com/crossplane/function-sequencer/input/v1beta1"
 )
 
 func TestRunFunction(t *testing.T) {
+
+	var (
+		xr = `{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`
+		mr = `{"apiVersion":"example.org/v1","kind":"MR","metadata":{"name":"cool-mr"}}`
+	)
 
 	type args struct {
 		ctx context.Context
@@ -28,7 +37,471 @@ func TestRunFunction(t *testing.T) {
 		args   args
 		want   want
 	}{
-		// TODO: Add test cases.
+		"ObservedAreSkipped": {
+			reason: "Even though that second is skipped because it's in the observed state, delay third resource because first is not ready",
+			args: args{
+				req: &fnv1beta1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+									"third",
+								},
+							},
+						},
+					}),
+					Observed: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1beta1.RunFunctionResponse{
+					Meta: &fnv1beta1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1beta1.Result{
+						{
+							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
+							Message:  "Delaying creation of resource \"third\" because \"first\" is not ready or does not exist yet",
+						},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
+		"FirstNotReady": {
+			reason: "The function should delay the creation of the second resource because the first is not ready",
+			args: args{
+				req: &fnv1beta1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+							},
+						},
+					}),
+					Observed: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_FALSE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_FALSE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1beta1.RunFunctionResponse{
+					Meta: &fnv1beta1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1beta1.Result{
+						{
+							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
+							Message:  "Delaying creation of resource \"second\" because \"first\" is not ready or does not exist yet",
+						},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_FALSE,
+							},
+						},
+					},
+				},
+			},
+		},
+		"FirstReady": {
+			reason: "The function should not delay the creation of the second resource because the first is ready",
+			args: args{
+				req: &fnv1beta1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+							},
+						},
+					}),
+					Observed: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1beta1.RunFunctionResponse{
+					Meta:    &fnv1beta1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1beta1.Result{},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
+		"BothReady": {
+			reason: "The function should return both of them",
+			args: args{
+				req: &fnv1beta1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+							},
+						},
+					}),
+					Observed: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1beta1.RunFunctionResponse{
+					Meta:    &fnv1beta1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1beta1.Result{},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
+		"SequencesFirstNotReadyInBoth": {
+			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			args: args{
+				req: &fnv1beta1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+							},
+							{
+								Sequence: []resource.Name{
+									"third",
+									"fourth",
+								},
+							},
+						},
+					}),
+					Observed: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"fourth": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1beta1.RunFunctionResponse{
+					Meta: &fnv1beta1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1beta1.Result{
+						{
+							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
+							Message:  "Delaying creation of resource \"second\" because \"first\" is not ready or does not exist yet",
+						},
+						{
+							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
+							Message:  "Delaying creation of resource \"fourth\" because \"third\" is not ready or does not exist yet",
+						},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
+		"SequencesFirstReadyInBoth": {
+			reason: "The function should not delay the creation of any resource",
+			args: args{
+				req: &fnv1beta1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+							},
+							{
+								Sequence: []resource.Name{
+									"third",
+									"fourth",
+								},
+							},
+						},
+					}),
+					Observed: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"fourth": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1beta1.RunFunctionResponse{
+					Meta:    &fnv1beta1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1beta1.Result{},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"fourth": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
+		"OutOfSequence": {
+			reason: "The function should delay the creation of second, but allow the creation of the other since its not in a sequence",
+			args: args{
+				req: &fnv1beta1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+							},
+						},
+					}),
+					Observed: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_FALSE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"outofsequence": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1beta1.RunFunctionResponse{
+					Meta: &fnv1beta1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1beta1.Result{
+						{
+							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
+							Message:  "Delaying creation of resource \"second\" because \"first\" is not ready or does not exist yet",
+						},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_FALSE,
+							},
+							"outofsequence": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range cases {
