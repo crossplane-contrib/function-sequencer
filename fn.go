@@ -65,7 +65,7 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 			for _, before := range sequence[:i] {
 				re := regexp.MustCompile(string(before))
 				keys := []resource.Name{}
-				for k, _ := range desiredComposed {
+				for k := range desiredComposed {
 					if re.MatchString(string(k)) {
 						keys = append(keys, k)
 					}
