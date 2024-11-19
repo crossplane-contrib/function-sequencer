@@ -34,10 +34,13 @@ spec:
           metadata:
             type: object
           rules:
+            description: Rules is a list of rules that describe sequences of resources.
             items:
+              description: SequencingRule is a rule that describes a sequence of resources.
               properties:
                 sequence:
-                  description: 'TODO: InferFromUsages InferFromUsages bool            `json:"inferFromUsages,omitempty"`'
+                  description: 'TODO: Should we add a way to infer sequencing from
+                    usages? e.g. InferFromUsages: true InferFromUsages bool            `json:"inferFromUsages,omitempty"`'
                   items:
                     description: A Name uniquely identifies a composed resource within
                       a Composition Function pipeline. It's not the resource's metadata.name.
