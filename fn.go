@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
@@ -20,6 +21,13 @@ type Function struct {
 
 	log logging.Logger
 }
+
+const (
+	// START marks the start of a regex pattern.
+	START = "^"
+	// END marks the end of a regex pattern.
+	END = "$"
+)
 
 // RunFunction runs the Function.
 func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequest) (*fnv1beta1.RunFunctionResponse, error) { //nolint:gocyclo // This function is unavoidably complex.
@@ -63,9 +71,13 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 				continue
 			}
 			for _, before := range sequence[:i] {
-				// add the regex with ^ & $ to match the entire string
-				// possibly avoid using regex for matching literal strings
-				strictPattern := fmt.Sprintf("^%s$", string(before))
+				strictPattern := string(before)
+				if !strings.HasPrefix(strictPattern, START) && !strings.HasSuffix(strictPattern, END) {
+					// if the user provides a delimited regex, we'll use it as is
+					// if not, add the regex with ^ & $ to match the entire string
+					// possibly avoid using regex for matching literal strings
+					strictPattern = fmt.Sprintf("%s%s%s", START, string(before), END)
+				}
 				re := regexp.MustCompile(strictPattern)
 				keys := []resource.Name{}
 				for k := range desiredComposed {
