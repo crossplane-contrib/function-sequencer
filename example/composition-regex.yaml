@@ -52,12 +52,27 @@ spec:
                   - time: 10s
                     conditionType: Ready
                     conditionStatus: "True"
-        - name: second-resource
+        - name: second-object
           base:
             apiVersion: nop.crossplane.io/v1alpha1
             kind: NopResource
             metadata:
-              name: second-resource
+              name: second-object
+            spec:
+              forProvider:
+                conditionAfter:
+                  - time: 5s
+                    conditionType: Ready
+                    conditionStatus: "False"
+                  - time: 10s
+                    conditionType: Ready
+                    conditionStatus: "True"
+        - name: third-resource
+          base:
+            apiVersion: nop.crossplane.io/v1alpha1
+            kind: NopResource
+            metadata:
+              name: third-resource
             spec:
               forProvider:
                 conditionAfter:
@@ -79,4 +94,5 @@ spec:
       rules:
         - sequence:
           - first-subresource-.*
-          - second-resource
+          - object$ # this will match everything that ends with "object"
+          - third-resource

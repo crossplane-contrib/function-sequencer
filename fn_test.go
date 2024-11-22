@@ -785,6 +785,86 @@ func TestRunFunction(t *testing.T) {
 				},
 			},
 		},
+		"SequenceRegexAlreadyPrefixed": {
+			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			args: args{
+				req: &fnv1beta1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"^first-.*$",
+									"^second-.*",
+									"third-.*$",
+									"fourth",
+								},
+							},
+						},
+					}),
+					Observed: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"first-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"second-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"third-0": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1beta1.RunFunctionResponse{
+					Meta: &fnv1beta1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1beta1.Result{
+						{
+							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
+							Message:  "Delaying creation of resource \"fourth\" because \"third-.*$\" is not fully ready (0 of 1)",
+						},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"first-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"second-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"third-0": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range cases {
