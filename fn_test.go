@@ -556,7 +556,7 @@ func TestRunFunction(t *testing.T) {
 						Rules: []v1beta1.SequencingRule{
 							{
 								Sequence: []resource.Name{
-									"first-*",
+									"first-.*",
 									"second",
 								},
 							},
@@ -597,7 +597,7 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"second\" because \"first-*\" is not fully ready (2 of 3)",
+							Message:  "Delaying creation of resource \"second\" because \"first-.*\" is not fully ready (2 of 3)",
 						},
 					},
 					Desired: &fnv1beta1.State{
@@ -629,8 +629,8 @@ func TestRunFunction(t *testing.T) {
 						Rules: []v1beta1.SequencingRule{
 							{
 								Sequence: []resource.Name{
-									"first-*",
-									"second-*",
+									"first-.*",
+									"second-.*",
 									"third",
 								},
 							},
@@ -679,7 +679,7 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"third\" because \"second-*\" is not fully ready (1 of 2)",
+							Message:  "Delaying creation of resource \"third\" because \"second-.*\" is not fully ready (1 of 2)",
 						},
 					},
 					Desired: &fnv1beta1.State{
@@ -720,7 +720,7 @@ func TestRunFunction(t *testing.T) {
 							{
 								Sequence: []resource.Name{
 									"first",
-									"second-*",
+									"second-.*",
 									"third",
 								},
 							},
@@ -761,7 +761,7 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"third\" because \"second-*\" is not fully ready (1 of 2)",
+							Message:  "Delaying creation of resource \"third\" because \"second-.*\" is not fully ready (1 of 2)",
 						},
 					},
 					Desired: &fnv1beta1.State{

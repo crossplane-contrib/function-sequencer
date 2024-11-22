@@ -63,7 +63,10 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 				continue
 			}
 			for _, before := range sequence[:i] {
-				re := regexp.MustCompile(string(before))
+				// add the regex with ^ & $ to match the entire string
+				// possibly avoid using regex for matching literal strings
+				strictPattern := fmt.Sprintf("^%s$", string(before))
+				re := regexp.MustCompile(strictPattern)
 				keys := []resource.Name{}
 				for k := range desiredComposed {
 					if re.MatchString(string(k)) {
