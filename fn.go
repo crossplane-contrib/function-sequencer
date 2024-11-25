@@ -78,7 +78,11 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 					// possibly avoid using regex for matching literal strings
 					strictPattern = fmt.Sprintf("%s%s%s", START, string(before), END)
 				}
-				re := regexp.MustCompile(strictPattern)
+				re, err := regexp.Compile(strictPattern)
+				if err != nil {
+					response.Fatal(rsp, errors.Wrapf(err, "cannot compile regex %s", strictPattern))
+					return rsp, nil
+				}
 				keys := []resource.Name{}
 				for k := range desiredComposed {
 					if re.MatchString(string(k)) {
