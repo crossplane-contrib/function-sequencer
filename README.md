@@ -27,7 +27,7 @@ See `example/composition.yaml` for a complete example.
 
 It also allows you to provide a regex to match and capture a whole group of resources and wait for them to be ready.
 
-For example, the pipeline step below, will ensure that `second-resource` is not created until all `first-subresource-*` objects are ready.
+For example, the pipeline step below, will ensure that `second-resource` is not created until all `first-subresource-.*` objects are ready.
 
 ```yaml
   - step: sequence-creation
@@ -38,8 +38,17 @@ For example, the pipeline step below, will ensure that `second-resource` is not 
       kind: Input
       rules:
         - sequence:
-          - first-subresource-*
+          - first-subresource-.*
           - second-resource
+```
+
+You can write the regex as strict as you want, but keep in mind that it defaults to strict matching (start and end are enforced).
+In other words, the following rules apply:
+```yaml
+- resource    # this has no explicit start or end, so it will match EXACTLY ^resource$ (normal behaviour)
+- a-group-.*  # this has no explicit start or end, so it will match EXACTLY ^a-group-.*$
+- ^a-group    # this has an explicit start, so it will match EVERYTHING that starts with a-group
+- a-group$    # this has an explicit end, so it will match EVERYTHING that ends with a-group
 ```
 
 See `example/composition-regex.yaml` for a complete example.
