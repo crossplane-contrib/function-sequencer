@@ -96,11 +96,11 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 
 				if desired == 0 || desired != readyResources {
 					// no resource created
-					msg := fmt.Sprintf("Delaying creation of resource %q because %q does not exist yet", r, before)
+					msg := fmt.Sprintf("Delaying creation of resource(s) matching %q because %q does not exist yet", r, before)
 					if desired > 0 {
 						// provide a nicer message if there are resources.
 						msg = fmt.Sprintf(
-							"Delaying creation of resource %q because %q is not fully ready (%d of %d)",
+							"Delaying creation of resource(s) matching %q because %q is not fully ready (%d of %d)",
 							r,
 							before,
 							readyResources,
