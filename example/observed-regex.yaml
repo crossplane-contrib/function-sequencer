@@ -4,7 +4,7 @@ metadata:
   annotations:
     crossplane.io/external-name: foo
     crossplane.io/composition-resource-name: first-subresource-2
-  name: first
+  name: first-subresource-2
 spec:
   forProvider:
     conditionAfter:
@@ -32,7 +32,7 @@ metadata:
   annotations:
     crossplane.io/external-name: foo
     crossplane.io/composition-resource-name: first-subresource-1
-  name: first
+  name: first-subresource-1
 spec:
   forProvider:
     conditionAfter:

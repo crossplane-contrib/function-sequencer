@@ -89,7 +89,7 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"third\" because \"first\" is not fully ready (0 of 1)",
+							Message:  "Delaying creation of resource(s) matching \"third\" because \"first\" is not fully ready (0 of 1)",
 						},
 					},
 					Desired: &fnv1beta1.State{
@@ -142,7 +142,7 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"second\" because \"first\" does not exist yet",
+							Message:  "Delaying creation of resource(s) matching \"second\" because \"first\" does not exist yet",
 						},
 					},
 					Desired: &fnv1beta1.State{
@@ -197,7 +197,7 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"second\" because \"first\" is not fully ready (0 of 1)",
+							Message:  "Delaying creation of resource(s) matching \"second\" because \"first\" is not fully ready (0 of 1)",
 						},
 					},
 					Desired: &fnv1beta1.State{
@@ -383,11 +383,11 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"second\" because \"first\" is not fully ready (0 of 1)",
+							Message:  "Delaying creation of resource(s) matching \"second\" because \"first\" is not fully ready (0 of 1)",
 						},
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"fourth\" because \"third\" is not fully ready (0 of 1)",
+							Message:  "Delaying creation of resource(s) matching \"fourth\" because \"third\" is not fully ready (0 of 1)",
 						},
 					},
 					Desired: &fnv1beta1.State{
@@ -528,7 +528,7 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"second\" because \"first\" is not fully ready (0 of 1)",
+							Message:  "Delaying creation of resource(s) matching \"second\" because \"first\" is not fully ready (0 of 1)",
 						},
 					},
 					Desired: &fnv1beta1.State{
@@ -597,7 +597,7 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"second\" because \"first-.*\" is not fully ready (2 of 3)",
+							Message:  "Delaying creation of resource(s) matching \"second\" because \"first-.*\" is not fully ready (2 of 3)",
 						},
 					},
 					Desired: &fnv1beta1.State{
@@ -679,7 +679,7 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"third\" because \"second-.*\" is not fully ready (1 of 2)",
+							Message:  "Delaying creation of resource(s) matching \"third\" because \"second-.*\" is not fully ready (1 of 2)",
 						},
 					},
 					Desired: &fnv1beta1.State{
@@ -761,7 +761,7 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"third\" because \"second-.*\" is not fully ready (1 of 2)",
+							Message:  "Delaying creation of resource(s) matching \"third\" because \"second-.*\" is not fully ready (1 of 2)",
 						},
 					},
 					Desired: &fnv1beta1.State{
@@ -779,6 +779,84 @@ func TestRunFunction(t *testing.T) {
 							},
 							"second-1": {
 								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
+		"SequenceRegexWaitComplex": {
+			reason: "The function should not modify the sequence regex, since it's already prefixed",
+			args: args{
+				req: &fnv1beta1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first-.*",
+									"second$",
+									"third-resource",
+								},
+							},
+						},
+					}),
+					Observed: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"first-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_FALSE,
+							},
+							"0-second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"1-second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"third-resource": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1beta1.RunFunctionResponse{
+					Meta: &fnv1beta1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1beta1.Result{
+						{
+							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
+							Message:  "Delaying creation of resource(s) matching \"second$\" because \"first-.*\" is not fully ready (1 of 2)",
+						},
+						{
+							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
+							Message:  "Delaying creation of resource(s) matching \"third-resource\" because \"first-.*\" is not fully ready (1 of 2)",
+						},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"first-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_FALSE,
 							},
 						},
 					},
@@ -837,7 +915,7 @@ func TestRunFunction(t *testing.T) {
 					Results: []*fnv1beta1.Result{
 						{
 							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
-							Message:  "Delaying creation of resource \"fourth\" because \"third-.*$\" is not fully ready (0 of 1)",
+							Message:  "Delaying creation of resource(s) matching \"fourth\" because \"third-.*$\" is not fully ready (0 of 1)",
 						},
 					},
 					Desired: &fnv1beta1.State{
