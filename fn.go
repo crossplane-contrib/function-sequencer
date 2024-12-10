@@ -71,21 +71,14 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 				continue
 			}
 			for _, before := range sequence[:i] {
-				strictPattern := string(before)
-				if !strings.HasPrefix(strictPattern, START) && !strings.HasSuffix(strictPattern, END) {
-					// if the user provides a delimited regex, we'll use it as is
-					// if not, add the regex with ^ & $ to match the entire string
-					// possibly avoid using regex for matching literal strings
-					strictPattern = fmt.Sprintf("%s%s%s", START, string(before), END)
-				}
-				re, err := regexp.Compile(strictPattern)
+				beforeRegex, err := getStrictRegex(string(before))
 				if err != nil {
-					response.Fatal(rsp, errors.Wrapf(err, "cannot compile regex %s", strictPattern))
+					response.Fatal(rsp, errors.Wrapf(err, "cannot compile regex %s", before))
 					return rsp, nil
 				}
 				keys := []resource.Name{}
 				for k := range desiredComposed {
-					if re.MatchString(string(k)) {
+					if beforeRegex.MatchString(string(k)) {
 						keys = append(keys, k)
 					}
 				}
@@ -103,11 +96,11 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 
 				if desired == 0 || desired != readyResources {
 					// no resource created
-					msg := fmt.Sprintf("Delaying creation of resource %q because %q does not exist yet", r, before)
+					msg := fmt.Sprintf("Delaying creation of resource(s) matching %q because %q does not exist yet", r, before)
 					if desired > 0 {
 						// provide a nicer message if there are resources.
 						msg = fmt.Sprintf(
-							"Delaying creation of resource %q because %q is not fully ready (%d of %d)",
+							"Delaying creation of resource(s) matching %q because %q is not fully ready (%d of %d)",
 							r,
 							before,
 							readyResources,
@@ -116,7 +109,13 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 					}
 					response.Normal(rsp, msg)
 					f.log.Info(msg)
-					delete(desiredComposed, r)
+					// find all objects that match the regex and delete them from the desiredComposed map
+					currentRegex, _ := getStrictRegex(string(r))
+					for k := range desiredComposed {
+						if currentRegex.MatchString(string(k)) {
+							delete(desiredComposed, k)
+						}
+					}
 					break
 				}
 			}
@@ -125,4 +124,14 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 
 	rsp.Desired.Resources = nil
 	return rsp, response.SetDesiredComposedResources(rsp, desiredComposed)
+}
+
+func getStrictRegex(pattern string) (*regexp.Regexp, error) {
+	if !strings.HasPrefix(pattern, START) && !strings.HasSuffix(pattern, END) {
+		// if the user provides a delimited regex, we'll use it as is
+		// if not, add the regex with ^ & $ to match the entire string
+		// possibly avoid using regex for matching literal strings
+		pattern = fmt.Sprintf("%s%s%s", START, pattern, END)
+	}
+	return regexp.Compile(pattern)
 }
