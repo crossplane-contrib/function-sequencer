@@ -621,6 +621,85 @@ func TestRunFunction(t *testing.T) {
 				},
 			},
 		},
+		"SequenceRegexObservedAreSkipped": {
+			reason: "The function should not attempt to remove resources from the desired state when they are already in the observed state",
+			args: args{
+				req: &fnv1beta1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first-.*",
+									"second-.*",
+								},
+							},
+						},
+					}),
+					Observed: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+						},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"first-2": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1beta1.RunFunctionResponse{
+					Meta: &fnv1beta1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1beta1.Result{
+						{
+							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
+							Message:  "Delaying creation of resource(s) matching \"second-.*\" because \"first-.*\" is not fully ready (1 of 2)",
+						},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+							"first-2": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    fnv1beta1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
 		"SequenceRegexFirstGroupReady": {
 			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
 			args: args{
