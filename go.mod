@@ -2,7 +2,7 @@ module github.com/crossplane/function-sequencer
 
 go 1.21
 
-toolchain go1.21.3
+toolchain go1.24.2
 
 require (
 	github.com/alecthomas/kong v0.9.0
