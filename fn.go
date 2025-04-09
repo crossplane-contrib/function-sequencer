@@ -113,6 +113,10 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 					currentRegex, _ := getStrictRegex(string(r))
 					for k := range desiredComposed {
 						if currentRegex.MatchString(string(k)) {
+							if _, ok := observedComposed[k]; ok {
+								// if the resource is already part of the observedComposed, we should not delete it
+								continue
+							}
 							delete(desiredComposed, k)
 						}
 					}
