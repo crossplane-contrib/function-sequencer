@@ -38,6 +38,10 @@ spec:
             type: string
           metadata:
             type: object
+          resetCompositeReadiness:
+            description: ResetCompositeReadiness sets the composite ready state to
+              false if desired resources are removed from the request.
+            type: boolean
           rules:
             description: Rules is a list of rules that describe sequences of resources.
             items:

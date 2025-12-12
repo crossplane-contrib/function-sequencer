@@ -119,6 +119,10 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 								continue
 							}
 							delete(desiredComposed, k)
+							if in.ResetCompositeReadiness {
+								// Reset the composite ready indicator to false when a desired resource is deleted.
+								rsp.Desired.Composite.Ready = v1.Ready_READY_FALSE
+							}
 						}
 					}
 					break
