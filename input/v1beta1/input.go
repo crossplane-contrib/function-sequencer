@@ -33,6 +33,10 @@ type Input struct {
 	// +kubebuilder:object:default=false
 	ManageCompositeReadiness bool `json:"manage-composite-readiness,omitempty"`
 
+	// ManageCompositeReadiness sets the composite ready state to false if desired resources are removed from the request.
+	// +kubebuilder:object:default=false
+	ManageCompositeReadiness bool `json:"manage-composite-readiness,omitempty"`
+
 	// Rules is a list of rules that describe sequences of resources.
 	Rules []SequencingRule `json:"rules"`
 }
