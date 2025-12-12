@@ -8,11 +8,12 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	"github.com/crossplane/function-sequencer/input/v1beta1"
+
 	fnv1beta1 "github.com/crossplane/function-sdk-go/proto/v1beta1"
 	"github.com/crossplane/function-sdk-go/request"
 	"github.com/crossplane/function-sdk-go/resource"
 	"github.com/crossplane/function-sdk-go/response"
-	"github.com/crossplane/function-sequencer/input/v1beta1"
 )
 
 // Function returns whatever response you ask it to.
@@ -30,7 +31,7 @@ const (
 )
 
 // RunFunction runs the Function.
-func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequest) (*fnv1beta1.RunFunctionResponse, error) { //nolint:gocyclo // This function is unavoidably complex.
+func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequest) (*fnv1beta1.RunFunctionResponse, error) { //nolint:gocognit // This function is unavoidably complex.
 	f.log.Info("Running function", "tag", req.GetMeta().GetTag())
 
 	rsp := response.To(req, response.DefaultTTL)

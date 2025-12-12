@@ -26,7 +26,7 @@ type SequencingRule struct {
 // +kubebuilder:resource:categories=crossplane
 type Input struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata"`
 
 	// Rules is a list of rules that describe sequences of resources.
 	Rules []SequencingRule `json:"rules"`
