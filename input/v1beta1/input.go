@@ -17,6 +17,8 @@ import (
 type SequencingRule struct {
 	// TODO: Should we add a way to infer sequencing from usages? e.g. InferFromUsages: true
 	// InferFromUsages bool            `json:"inferFromUsages,omitempty"`
+
+	// Sequence is a list of composition resource names.
 	Sequence []resource.Name `json:"sequence,omitempty"`
 }
 
@@ -26,7 +28,7 @@ type SequencingRule struct {
 // +kubebuilder:resource:categories=crossplane
 type Input struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// Rules is a list of rules that describe sequences of resources.
 	Rules []SequencingRule `json:"rules"`
