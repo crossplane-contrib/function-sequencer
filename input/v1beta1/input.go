@@ -27,16 +27,11 @@ type SequencingRule struct {
 // +kubebuilder:resource:categories=crossplane
 type Input struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	// ManageCompositeReadiness sets the composite ready state to false if desired resources are removed from the request.
 	// +kubebuilder:object:default=false
-	ManageCompositeReadiness bool `json:"manage-composite-readiness,omitempty"`
-
-	// ManageCompositeReadiness sets the composite ready state to false if desired resources are removed from the request.
-	// +kubebuilder:object:default=false
-	ManageCompositeReadiness bool `json:"manage-composite-readiness,omitempty"`
-
+	ManageCompositeReadiness bool `json:"manageCompositeReadiness,omitempty"`
 	// Rules is a list of rules that describe sequences of resources.
 	Rules []SequencingRule `json:"rules"`
 }
