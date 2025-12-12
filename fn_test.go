@@ -4,20 +4,19 @@ import (
 	"context"
 	"testing"
 
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	"github.com/crossplane/function-sequencer/input/v1beta1"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	fnv1beta1 "github.com/crossplane/function-sdk-go/proto/v1beta1"
 	"github.com/crossplane/function-sdk-go/resource"
 	"github.com/crossplane/function-sdk-go/response"
-	"github.com/crossplane/function-sequencer/input/v1beta1"
 )
 
 func TestRunFunction(t *testing.T) {
-
 	var (
 		xr = `{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`
 		mr = `{"apiVersion":"example.org/v1","kind":"MR","metadata":{"name":"cool-mr"}}`
