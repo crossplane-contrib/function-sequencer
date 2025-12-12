@@ -1094,6 +1094,79 @@ func TestRunFunction(t *testing.T) {
 				},
 			},
 		},
+		"MarkCompositeNotReady": {
+			reason: "Set the Composite ready flag to false",
+			args: args{
+				req: &fnv1beta1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						ManageCompositeReadiness: true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+									"third",
+								},
+							},
+						},
+					}),
+					Observed: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &fnv1beta1.RunFunctionResponse{
+					Meta: &fnv1beta1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*fnv1beta1.Result{
+						{
+							Severity: fnv1beta1.Severity_SEVERITY_NORMAL,
+							Message:  "Delaying creation of resource(s) matching \"third\" because \"first\" is not fully ready (0 of 1)",
+						},
+					},
+					Desired: &fnv1beta1.State{
+						Composite: &fnv1beta1.Resource{
+							Ready:    fnv1beta1.Ready_READY_FALSE,
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*fnv1beta1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range cases {

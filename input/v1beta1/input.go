@@ -16,7 +16,8 @@ import (
 // SequencingRule is a rule that describes a sequence of resources.
 type SequencingRule struct {
 	// TODO: Should we add a way to infer sequencing from usages? e.g. InferFromUsages: true
-	// InferFromUsages bool            `json:"inferFromUsages,omitempty"`
+	// TODO: InferFromUsages bool            `json:"inferFromUsages,omitempty"`
+	// Sequence is a list of SequencingRules
 	Sequence []resource.Name `json:"sequence,omitempty"`
 }
 
@@ -27,6 +28,10 @@ type SequencingRule struct {
 type Input struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// ManageCompositeReadiness sets the composite ready state to false if desired resources are removed from the request.
+	// +kubebuilder:object:default=false
+	ManageCompositeReadiness bool `json:"manage-composite-readiness,omitempty"`
 
 	// Rules is a list of rules that describe sequences of resources.
 	Rules []SequencingRule `json:"rules"`

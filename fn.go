@@ -118,6 +118,10 @@ func (f *Function) RunFunction(_ context.Context, req *fnv1beta1.RunFunctionRequ
 								continue
 							}
 							delete(desiredComposed, k)
+							if in.ManageCompositeReadiness {
+								// Deleting a desired resource means that the Composite should not be automatically marked as Ready
+								rsp.Desired.Composite.Ready = fnv1beta1.Ready_READY_FALSE
+							}
 						}
 					}
 					break
