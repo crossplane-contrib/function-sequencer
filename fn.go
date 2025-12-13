@@ -2,17 +2,23 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"maps"
 	"regexp"
 	"strings"
 
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/logging"
+	apiextensionsv1beta1 "github.com/crossplane/crossplane/v2/apis/apiextensions/v1beta1"
+	protectionv1beta1 "github.com/crossplane/crossplane/v2/apis/protection/v1beta1"
 	"github.com/crossplane/function-sequencer/input/v1beta1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	v1 "github.com/crossplane/function-sdk-go/proto/v1"
 	"github.com/crossplane/function-sdk-go/request"
 	"github.com/crossplane/function-sdk-go/resource"
+	"github.com/crossplane/function-sdk-go/resource/composed"
 	"github.com/crossplane/function-sdk-go/response"
 )
 
@@ -28,6 +34,16 @@ const (
 	START = "^"
 	// END marks the end of a regex pattern.
 	END = "$"
+)
+
+const (
+	DependencyReason         = "dependency"
+	ProtectionGroupVersion   = protectionv1beta1.Group + "/" + protectionv1beta1.Version
+	ProtectionV1GroupVersion = apiextensionsv1beta1.Group + "/" + apiextensionsv1beta1.Version
+	// UsageNameSuffix is the suffix applied when generating Usage names.
+	UsageNameSuffix = "dependency"
+	// V1ModeError Error when trying to protect a namespaced resource when in v1 mode.
+	V1ModeError = "cannot protect namespaced resource (kind: %s, name: %s, namespace: %s) with enableV1Mode=true. v1 usages only support cluster-scoped resources."
 )
 
 // RunFunction runs the Function.
@@ -59,6 +75,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 	for _, rule := range in.Rules {
 		sequences = append(sequences, rule.Sequence)
 	}
+	usages := make(map[resource.Name]*resource.DesiredComposed)
 
 	for _, sequence := range sequences {
 		for i, r := range sequence {
@@ -67,6 +84,30 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 				continue
 			}
 			if _, created := observedComposed[r]; created {
+				f.log.Debug("Processing ", "r:", r)
+				if in.EnableDeletionSequencing {
+					of := sequence[i-1]
+					ofRegex, err := getStrictRegex(string(of))
+					if err != nil {
+						response.Fatal(rsp, errors.Wrapf(err, "cannot compile regex %s", of))
+						return rsp, nil
+					}
+					for k := range desiredComposed {
+						if ofRegex.MatchString(string(k)) {
+							if _, ok := observedComposed[k]; ok {
+								f.log.Debug("Generate Usage", "of:", k, "by r:", r)
+								usage := GenerateUsage(&observedComposed[k].Resource.Unstructured, &observedComposed[r].Resource.Unstructured, in.ReplayDeletion, in.UsageVersion)
+								usageComposed := composed.New()
+								if err := convertViaJSON(usageComposed, usage); err != nil {
+									response.Fatal(rsp, errors.Wrapf(err, "cannot convert to JSON %s", usage))
+									return rsp, err
+								}
+								f.log.Debug("created usage", "kind", usageComposed.GetKind(), "name", usageComposed.GetName(), "namespace", usageComposed.GetNamespace())
+								usages[r+"-"+k+"-usage"] = &resource.DesiredComposed{Resource: usageComposed, Ready: resource.ReadyTrue}
+							}
+						}
+					}
+				}
 				// We've already created this resource, so we don't need to do anything.
 				// We only sequence creation of resources that don't exist yet.
 				continue
@@ -95,6 +136,12 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					}
 				}
 
+				currentRegex, err := getStrictRegex(string(r))
+				if err != nil {
+					response.Fatal(rsp, errors.Wrapf(err, "cannot compile regex %s", r))
+					return rsp, nil
+				}
+
 				if desired == 0 || desired != readyResources {
 					// no resource created
 					msg := fmt.Sprintf("Delaying creation of resource(s) matching %q because %q does not exist yet", r, before)
@@ -111,7 +158,6 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					response.Normal(rsp, msg)
 					f.log.Info(msg)
 					// find all objects that match the regex and delete them from the desiredComposed map
-					currentRegex, _ := getStrictRegex(string(r))
 					for k := range desiredComposed {
 						if currentRegex.MatchString(string(k)) {
 							if _, ok := observedComposed[k]; ok {
@@ -127,10 +173,27 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					}
 					break
 				}
+				if in.EnableDeletionSequencing {
+					for c := range observedComposed {
+						if currentRegex.MatchString(string(c)) {
+							for _, k := range keys {
+								f.log.Debug("Generate Usage of ", "k:", k, "by c:", c)
+								usage := GenerateUsage(&observedComposed[k].Resource.Unstructured, &observedComposed[c].Resource.Unstructured, in.ReplayDeletion, in.UsageVersion)
+								usageComposed := composed.New()
+								if err := convertViaJSON(usageComposed, usage); err != nil {
+									response.Fatal(rsp, errors.Wrapf(err, "cannot convert to JSON %s", usage))
+									return rsp, err
+								}
+								f.log.Debug("created usage", "kind", usageComposed.GetKind(), "name", usageComposed.GetName(), "namespace", usageComposed.GetNamespace())
+								usages[c+"-"+k+"-usage"] = &resource.DesiredComposed{Resource: usageComposed, Ready: resource.ReadyTrue}
+							}
+						}
+					}
+				}
 			}
 		}
 	}
-
+	maps.Copy(desiredComposed, usages)
 	rsp.Desired.Resources = nil
 	return rsp, response.SetDesiredComposedResources(rsp, desiredComposed)
 }
@@ -143,4 +206,92 @@ func getStrictRegex(pattern string) (*regexp.Regexp, error) {
 		pattern = fmt.Sprintf("%s%s%s", START, pattern, END)
 	}
 	return regexp.Compile(pattern)
+}
+
+// GenerateUsage determines whether to return a v1 or v2 Crossplane usage.
+func GenerateUsage(of *unstructured.Unstructured, by *unstructured.Unstructured, rd bool, usageVersion v1beta1.UsageVersion) map[string]any {
+	if usageVersion == v1beta1.UsageV1 {
+		return GenerateV1Usage(of, by, rd)
+	}
+	return GenerateV2Usage(of, by, rd)
+}
+
+// GenerateV2Usage creates a v2 Usage for a resource.
+func GenerateV2Usage(of *unstructured.Unstructured, by *unstructured.Unstructured, rd bool) map[string]any {
+	name := strings.ToLower(by.GetKind() + "-" + by.GetName() + "-" + of.GetKind() + "-" + of.GetName())
+	usageType := protectionv1beta1.ClusterUsageKind
+	usageMeta := map[string]any{
+		"name": GenerateName(name, UsageNameSuffix),
+	}
+
+	namespace := of.GetNamespace()
+	if namespace != "" {
+		usageType = protectionv1beta1.UsageKind
+		usageMeta["namespace"] = namespace
+	}
+
+	usage := map[string]any{
+		"apiVersion": ProtectionGroupVersion,
+		"kind":       usageType,
+		"metadata":   usageMeta,
+		"spec": map[string]any{
+			"by": map[string]any{
+				"apiVersion": by.GetAPIVersion(),
+				"kind":       by.GetKind(),
+				"resourceRef": map[string]any{
+					"name": by.GetName(),
+				},
+			},
+			"of": map[string]any{
+				"apiVersion": of.GetAPIVersion(),
+				"kind":       of.GetKind(),
+				"resourceRef": map[string]any{
+					"name": of.GetName(),
+				},
+			},
+			"reason":         DependencyReason,
+			"replayDeletion": rd,
+		},
+	}
+	return usage
+}
+
+// GenerateV1Usage creates a Crossplane v1 Usage for a resource.
+// Only Cluster Scoped Resources are supported.
+func GenerateV1Usage(of *unstructured.Unstructured, by *unstructured.Unstructured, rd bool) map[string]any {
+	name := strings.ToLower(by.GetKind() + "-" + by.GetName() + "-" + of.GetKind() + "-" + of.GetName())
+	usage := map[string]any{
+		"apiVersion": ProtectionV1GroupVersion,
+		"kind":       apiextensionsv1beta1.UsageKind,
+		"metadata": map[string]any{
+			"name": GenerateName(name, UsageNameSuffix),
+		},
+		"spec": map[string]any{
+			"by": map[string]any{
+				"apiVersion": by.GetAPIVersion(),
+				"kind":       by.GetKind(),
+				"resourceRef": map[string]any{
+					"name": by.GetName(),
+				},
+			},
+			"of": map[string]any{
+				"apiVersion": of.GetAPIVersion(),
+				"kind":       of.GetKind(),
+				"resourceRef": map[string]any{
+					"name": of.GetName(),
+				},
+			},
+			"reason":         DependencyReason,
+			"replayDeletion": rd,
+		},
+	}
+	return usage
+}
+
+func convertViaJSON(to, from any) error {
+	bs, err := json.Marshal(from)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(bs, to)
 }

@@ -18,8 +18,16 @@ import (
 
 func TestRunFunction(t *testing.T) {
 	var (
-		xr = `{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`
-		mr = `{"apiVersion":"example.org/v1","kind":"MR","metadata":{"name":"cool-mr"}}`
+		xr    = `{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`
+		mr    = `{"apiVersion":"example.org/v1","kind":"MR","metadata":{"name":"cool-mr"}}`
+		nxr   = `{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr","namespace":"cool-namespace"},"spec":{"count":2}}`
+		nmr   = `{"apiVersion":"example.org/v1","kind":"MR","metadata":{"name":"cool-mr","namespace":"cool-namespace"}}`
+		uv1   = `{"apiVersion":"apiextensions.crossplane.io/v1beta1","kind":"Usage","metadata":{"name":"mr-cool-mr-xr-cool-xr-d9f469-dependency"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"XR","resourceRef":{"name":"cool-xr"}},"reason":"dependency","replayDeletion":true}}`
+		u2v1  = `{"apiVersion":"apiextensions.crossplane.io/v1beta1","kind":"Usage","metadata":{"name":"mr-cool-mr-mr-cool-mr-91201d-dependency"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"reason":"dependency","replayDeletion":true}}`
+		uv2   = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"ClusterUsage","metadata":{"name":"mr-cool-mr-xr-cool-xr-d9f469-dependency"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"XR","resourceRef":{"name":"cool-xr"}},"reason":"dependency","replayDeletion":true}}`
+		u2v2  = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"ClusterUsage","metadata":{"name":"mr-cool-mr-mr-cool-mr-91201d-dependency"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"reason":"dependency","replayDeletion":true}}`
+		nuv2  = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"Usage","metadata":{"name":"mr-cool-mr-xr-cool-xr-d9f469-dependency","namespace":"cool-namespace"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"XR","resourceRef":{"name":"cool-xr"}},"reason":"dependency","replayDeletion":true}}`
+		nu2v2 = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"Usage","metadata":{"name":"mr-cool-mr-mr-cool-mr-91201d-dependency","namespace":"cool-namespace"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"reason":"dependency","replayDeletion":true}}`
 	)
 
 	target := v1.Target_TARGET_COMPOSITE
@@ -1102,6 +1110,567 @@ func TestRunFunction(t *testing.T) {
 							},
 							"second": {
 								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
+		"FirstReadyUsageV1": {
+			reason: "The function should create a V1 Usage when the first resource is ready",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+							},
+						},
+						UsageVersion: v1beta1.UsageV1,
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta:    &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-first-usage": {
+								Resource: resource.MustStructJSON(uv1),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
+		"FirstReadyUsageV2Cluster": {
+			reason: "The function should create a V2 ClusterUsage when the first resource is ready",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+							},
+						},
+						UsageVersion: v1beta1.UsageV2,
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta:    &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-first-usage": {
+								Resource: resource.MustStructJSON(uv2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
+		"FirstReadyUsageV2Namespaced": {
+			reason: "The function should create a V2 Namespaced Usage when the first resource is ready",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+							},
+						},
+						UsageVersion: v1beta1.UsageV2,
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(nxr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(nmr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(nxr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(nmr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta:    &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(nxr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(nmr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-first-usage": {
+								Resource: resource.MustStructJSON(nuv2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
+		"MixedRegexUsageV1": {
+			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second-.*",
+									"third",
+								},
+							},
+						},
+						UsageVersion: v1beta1.UsageV1,
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta:    &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0-first-usage": {
+								Resource: resource.MustStructJSON(uv1),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1-first-usage": {
+								Resource: resource.MustStructJSON(uv1),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-second-0-usage": {
+								Resource: resource.MustStructJSON(u2v1),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-second-1-usage": {
+								Resource: resource.MustStructJSON(u2v1),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
+		"MixedRegexUsageV2Cluster": {
+			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second-.*",
+									"third",
+								},
+							},
+						},
+						UsageVersion: v1beta1.UsageV2,
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta:    &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0-first-usage": {
+								Resource: resource.MustStructJSON(uv2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1-first-usage": {
+								Resource: resource.MustStructJSON(uv2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-second-0-usage": {
+								Resource: resource.MustStructJSON(u2v2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-second-1-usage": {
+								Resource: resource.MustStructJSON(u2v2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
+		"MixedRegexUsageV2Namespaced": {
+			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second-.*",
+									"third",
+								},
+							},
+						},
+						UsageVersion: v1beta1.UsageV2,
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(nxr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0": {
+								Resource: resource.MustStructJSON(nmr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(nmr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third": {
+								Resource: resource.MustStructJSON(nmr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(nxr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0": {
+								Resource: resource.MustStructJSON(nmr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(nmr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third": {
+								Resource: resource.MustStructJSON(nmr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta:    &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(nxr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0": {
+								Resource: resource.MustStructJSON(nmr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1": {
+								Resource: resource.MustStructJSON(nmr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-0-first-usage": {
+								Resource: resource.MustStructJSON(nuv2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-1-first-usage": {
+								Resource: resource.MustStructJSON(nuv2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-second-0-usage": {
+								Resource: resource.MustStructJSON(nu2v2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-second-1-usage": {
+								Resource: resource.MustStructJSON(nu2v2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third": {
+								Resource: resource.MustStructJSON(nmr),
 								Ready:    v1.Ready_READY_TRUE,
 							},
 						},

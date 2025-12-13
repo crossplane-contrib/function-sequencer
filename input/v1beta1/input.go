@@ -22,6 +22,17 @@ type SequencingRule struct {
 	Sequence []resource.Name `json:"sequence,omitempty"`
 }
 
+// UsageVersion defines the version of the Usage resource.
+type UsageVersion string
+
+const (
+	// UsageV1 indicates that Crossplane v1 apiextensions Usage should be used.
+	UsageV1 UsageVersion = "v1"
+
+	// UsageV2 indicates that Crossplane v2 protection Usage should be user.
+	UsageV2 UsageVersion = "v2"
+)
+
 // Input can be used to provide input to this Function.
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
@@ -29,6 +40,17 @@ type SequencingRule struct {
 type Input struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// EnableDeletionSequencing controls the automatic creation of Usage/ClusterUsage resources from the dependency tree
+	// defined by the rule sequences.
+	// +kubebuilder:object:default=false
+	EnableDeletionSequencing bool `json:"enableDeletionSequencing,omitempty"`
+	// ReplayDeletion sets the Usage/ClusterUsage replayDeletion attribute.
+	// +kubebuilder:object:default=true
+	ReplayDeletion bool `json:"replayDeletion,omitempty"`
+	// UsageVersion specifies the version of Usage/ClusterUsage resource to be created.
+	// +kubebuilder:object:default="v2"
+	UsageVersion UsageVersion `json:"usageVersion,omitempty"`
 
 	// ResetCompositeReadiness sets the composite ready state to false if desired resources are removed from the request.
 	// +kubebuilder:object:default=false
