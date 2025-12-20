@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/logging"
 	"github.com/crossplane/function-sequencer/input/v1beta1"
 
 	fnv1beta1 "github.com/crossplane/function-sdk-go/proto/v1beta1"
