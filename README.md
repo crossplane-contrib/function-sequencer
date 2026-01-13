@@ -135,7 +135,16 @@ This ensures that `second-resource` is deleted before any of the `first-resource
 
 ## Installation
 
-It can be installed as follows from the Upbound marketplace: https://marketplace.upbound.io/functions/crossplane-contrib/function-sequencer
+The function can be installed into a Crossplane cluster using the following manifest:
+
+```yaml
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-sequencer
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-sequencer:v0.5.0
+```
 
 ## Developing this function
 
