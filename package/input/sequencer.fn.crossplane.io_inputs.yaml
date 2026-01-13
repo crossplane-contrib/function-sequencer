@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.13.0
+    controller-gen.kubebuilder.io/version: v0.19.0
   name: inputs.sequencer.fn.crossplane.io
 spec:
   group: sequencer.fn.crossplane.io
@@ -22,28 +22,37 @@ spec:
         description: Input can be used to provide input to this Function.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
+          resetCompositeReadiness:
+            description: ResetCompositeReadiness sets the composite ready state to
+              false if desired resources are removed from the request.
+            type: boolean
           rules:
             description: Rules is a list of rules that describe sequences of resources.
             items:
               description: SequencingRule is a rule that describes a sequence of resources.
               properties:
                 sequence:
-                  description: 'TODO: Should we add a way to infer sequencing from
-                    usages? e.g. InferFromUsages: true InferFromUsages bool            `json:"inferFromUsages,omitempty"`'
+                  description: Sequence is a list of composition resource names.
                   items:
-                    description: A Name uniquely identifies a composed resource within
-                      a Composition Function pipeline. It's not the resource's metadata.name.
+                    description: |-
+                      A Name uniquely identifies a composed resource within a Composition Function
+                      pipeline. It's not the resource's metadata.name.
                     type: string
                   type: array
               type: object
