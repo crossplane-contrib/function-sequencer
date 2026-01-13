@@ -53,6 +53,24 @@ In other words, the following rules apply:
 
 See `example/composition-regex.yaml` for a complete example.
 
+### Composite Readiness
+Enabling the `resetCompositeReadiness` flag causes the function to set the Composite's `Ready` flag to `False` when at
+least one desired resource is deleted from the request. This prevents the Composite resource from entering the `Ready`
+state prematurely when there are pending resources that the composite reconciler is unaware of.
+
+```yaml
+  - step: sequence-creation
+    functionRef:
+      name: function-sequencer
+    input:
+      apiVersion: sequencer.fn.crossplane.io/v1beta1
+      kind: Input
+      resetCompositeReadiness: true
+      rules:
+        - sequence:
+          - first-subresource-.*
+          - second-resource
+```
 ## Installation
 
 It can be installed as follows from the Upbound marketplace: https://marketplace.upbound.io/functions/crossplane-contrib/function-sequencer
