@@ -209,7 +209,7 @@ func getStrictRegex(pattern string) (*regexp.Regexp, error) {
 }
 
 // GenerateUsage determines whether to return a v1 or v2 Crossplane usage.
-func GenerateUsage(of *unstructured.Unstructured, by *unstructured.Unstructured, rd bool, usageVersion v1beta1.UsageVersion) map[string]any {
+func GenerateUsage(of, by *unstructured.Unstructured, rd bool, usageVersion v1beta1.UsageVersion) map[string]any {
 	if usageVersion == v1beta1.UsageV1 {
 		return GenerateV1Usage(of, by, rd)
 	}
