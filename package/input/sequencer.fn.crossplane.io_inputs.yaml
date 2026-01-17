@@ -28,6 +28,11 @@ spec:
               may reject unrecognized values.
               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
+          enableDeletionSequencing:
+            description: |-
+              EnableDeletionSequencing controls the automatic creation of Usage/ClusterUsage resources from the dependency tree
+              defined by the rule sequences.
+            type: boolean
           kind:
             description: |-
               Kind is a string value representing the REST resource this object represents.
@@ -38,6 +43,10 @@ spec:
             type: string
           metadata:
             type: object
+          replayDeletion:
+            description: ReplayDeletion sets the Usage/ClusterUsage replayDeletion
+              attribute.
+            type: boolean
           resetCompositeReadiness:
             description: ResetCompositeReadiness sets the composite ready state to
               false if desired resources are removed from the request.
@@ -57,6 +66,10 @@ spec:
                   type: array
               type: object
             type: array
+          usageVersion:
+            description: UsageVersion specifies the version of Usage/ClusterUsage
+              resource to be created.
+            type: string
         required:
         - rules
         type: object
