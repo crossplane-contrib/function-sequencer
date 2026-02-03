@@ -103,7 +103,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 									return rsp, err
 								}
 								f.log.Debug("created usage", "kind", usageComposed.GetKind(), "name", usageComposed.GetName(), "namespace", usageComposed.GetNamespace())
-								usages[r+"-"+k+"-usage"] = &resource.DesiredComposed{Resource: usageComposed, Ready: resource.ReadyTrue}
+								usages["usage-"+r+"-"+k] = &resource.DesiredComposed{Resource: usageComposed, Ready: resource.ReadyTrue}
 							}
 						}
 					}
