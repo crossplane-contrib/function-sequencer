@@ -174,11 +174,11 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					break
 				}
 				if in.EnableDeletionSequencing {
-					for c := range observedComposed {
-						if currentRegex.MatchString(string(c)) {
+					for c, o := range observedComposed {
+						if currentRegex.MatchString(string(c)) && !isUsage(o, in.UsageVersion) {
 							for _, k := range keys {
 								f.log.Debug("Generate Usage of ", "k:", k, "by c:", c)
-								usage := GenerateUsage(&observedComposed[k].Resource.Unstructured, &observedComposed[c].Resource.Unstructured, in.ReplayDeletion, in.UsageVersion)
+								usage := GenerateUsage(&observedComposed[k].Resource.Unstructured, &o.Resource.Unstructured, in.ReplayDeletion, in.UsageVersion)
 								usageComposed := composed.New()
 								if err := convertViaJSON(usageComposed, usage); err != nil {
 									response.Fatal(rsp, errors.Wrapf(err, "cannot convert to JSON %s", usage))
@@ -294,4 +294,13 @@ func convertViaJSON(to, from any) error {
 		return err
 	}
 	return json.Unmarshal(bs, to)
+}
+
+func isUsage(composed resource.ObservedComposed, usageVersion v1beta1.UsageVersion) bool {
+	apiVersion := composed.Resource.GetAPIVersion()
+	kind := composed.Resource.GetKind()
+	if usageVersion == v1beta1.UsageV1 {
+		return apiVersion == ProtectionV1GroupVersion && kind == apiextensionsv1beta1.UsageKind
+	}
+	return apiVersion == ProtectionGroupVersion && (kind == protectionv1beta1.ClusterUsageKind || kind == protectionv1beta1.UsageKind)
 }
