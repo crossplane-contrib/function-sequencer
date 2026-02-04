@@ -297,9 +297,10 @@ func convertViaJSON(to, from any) error {
 }
 
 func isUsage(composed resource.ObservedComposed, usageVersion v1beta1.UsageVersion) bool {
+	apiVersion := composed.Resource.GetAPIVersion()
 	kind := composed.Resource.GetKind()
 	if usageVersion == v1beta1.UsageV1 {
-		return kind == apiextensionsv1beta1.UsageKind
+		return apiVersion == ProtectionV1GroupVersion && kind == apiextensionsv1beta1.UsageKind
 	}
-	return kind == protectionv1beta1.ClusterUsageKind || kind == protectionv1beta1.UsageKind
+	return apiVersion == ProtectionGroupVersion && (kind == protectionv1beta1.ClusterUsageKind || kind == protectionv1beta1.UsageKind)
 }
