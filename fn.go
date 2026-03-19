@@ -48,7 +48,7 @@ const (
 
 // RunFunction runs the Function.
 func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*v1.RunFunctionResponse, error) { //nolint:gocognit // This function is unavoidably complex.
-	f.log.Info("Running function", "tag", req.GetMeta().GetTag())
+	f.log.Debug("Running function", "tag", req.GetMeta().GetTag())
 
 	rsp := response.To(req, response.DefaultTTL)
 
@@ -156,7 +156,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 						)
 					}
 					response.Normal(rsp, msg)
-					f.log.Info(msg)
+					f.log.Debug(msg)
 					// find all objects that match the regex and delete them from the desiredComposed map
 					for k := range desiredComposed {
 						if currentRegex.MatchString(string(k)) {
