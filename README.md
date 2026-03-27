@@ -53,6 +53,25 @@ In other words, the following rules apply:
 
 See `example/composition-regex.yaml` for a complete example.
 
+### Function Response Caching
+
+You can set `cacheTTL` to control the Function response cache time-to-live.
+This is useful for tuning reconciliation behavior in large compositions.
+
+```yaml
+  - step: sequence-creation
+    functionRef:
+      name: function-sequencer
+    input:
+      apiVersion: sequencer.fn.crossplane.io/v1beta1
+      kind: Input
+      cacheTTL: 5m
+      rules:
+        - sequence:
+          - first
+          - second
+```
+
 ### Composite Readiness
 Enabling the `resetCompositeReadiness` flag causes the function to set the Composite's `Ready` flag to `False` when at
 least one desired resource is deleted from the request. This prevents the Composite resource from entering the `Ready`
