@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/crossplane/crossplane-runtime/v2/pkg/logging"
 	"github.com/crossplane/function-sequencer/input/v1beta1"
@@ -1764,6 +1765,104 @@ func TestRunFunction(t *testing.T) {
 			}
 
 			if diff := cmp.Diff(tc.want.err, err, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("%s\nf.RunFunction(...): -want err, +got err:\n%s", tc.reason, diff)
+			}
+		})
+	}
+}
+
+func TestRunFunctionCacheTTL(t *testing.T) {
+	target := v1.Target_TARGET_COMPOSITE
+	xr := `{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":1}}`
+
+	cases := map[string]struct {
+		reason string
+		input  *v1beta1.Input
+		want   *v1.RunFunctionResponse
+	}{
+		"ValidCacheTTL": {
+			reason: "The function should override the response TTL when cacheTTL is provided",
+			input: &v1beta1.Input{
+				CacheTTL: "5m",
+				Rules: []v1beta1.SequencingRule{
+					{Sequence: []resource.Name{"first", "second"}},
+				},
+			},
+			want: &v1.RunFunctionResponse{
+				Meta: &v1.ResponseMeta{Ttl: durationpb.New(5 * time.Minute)},
+				Results: []*v1.Result{
+					{
+						Severity: v1.Severity_SEVERITY_NORMAL,
+						Message:  "Delaying creation of resource(s) matching \"second\" because \"first\" does not exist yet",
+						Target:   &target,
+					},
+				},
+				Desired: &v1.State{
+					Composite: &v1.Resource{
+						Resource: resource.MustStructJSON(xr),
+					},
+					Resources: map[string]*v1.Resource{},
+				},
+			},
+		},
+		"InvalidCacheTTL": {
+			reason: "The function should return a fatal result when cacheTTL cannot be parsed",
+			input: &v1beta1.Input{
+				CacheTTL: "5x",
+				Rules: []v1beta1.SequencingRule{
+					{Sequence: []resource.Name{"first", "second"}},
+				},
+			},
+			want: &v1.RunFunctionResponse{
+				Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+				Results: []*v1.Result{
+					{
+						Severity: v1.Severity_SEVERITY_FATAL,
+						Message:  "cannot set cacheTTL: time: unknown unit \"x\" in duration \"5x\"",
+						Target:   &target,
+					},
+				},
+				Desired: &v1.State{
+					Composite: &v1.Resource{
+						Resource: resource.MustStructJSON(xr),
+					},
+					Resources: map[string]*v1.Resource{
+						"second": {
+							Resource: resource.MustStructJSON(xr),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := &Function{log: logging.NewNopLogger()}
+			req := &v1.RunFunctionRequest{
+				Input: resource.MustStructObject(tc.input),
+				Observed: &v1.State{
+					Composite: &v1.Resource{
+						Resource: resource.MustStructJSON(xr),
+					},
+					Resources: map[string]*v1.Resource{},
+				},
+				Desired: &v1.State{
+					Composite: &v1.Resource{
+						Resource: resource.MustStructJSON(xr),
+					},
+					Resources: map[string]*v1.Resource{
+						"second": {
+							Resource: resource.MustStructJSON(xr),
+						},
+					},
+				},
+			}
+			rsp, err := f.RunFunction(context.Background(), req)
+			if diff := cmp.Diff(tc.want, rsp, protocmp.Transform()); diff != "" {
+				t.Errorf("%s\nf.RunFunction(...): -want rsp, +got rsp:\n%s", tc.reason, diff)
+			}
+			if diff := cmp.Diff(nil, err, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("%s\nf.RunFunction(...): -want err, +got err:\n%s", tc.reason, diff)
 			}
 		})

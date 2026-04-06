@@ -7,12 +7,14 @@ import (
 	"maps"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/logging"
 	apiextensionsv1beta1 "github.com/crossplane/crossplane/v2/apis/apiextensions/v1beta1"
 	protectionv1beta1 "github.com/crossplane/crossplane/v2/apis/protection/v1beta1"
 	"github.com/crossplane/function-sequencer/input/v1beta1"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	v1 "github.com/crossplane/function-sdk-go/proto/v1"
@@ -56,6 +58,14 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 	if err := request.GetInput(req, in); err != nil {
 		response.Fatal(rsp, errors.Wrapf(err, "cannot get Function input from %T", req))
 		return rsp, nil
+	}
+	if in.CacheTTL != "" {
+		dur, err := time.ParseDuration(in.CacheTTL)
+		if err != nil {
+			response.Fatal(rsp, errors.Wrapf(err, "cannot set cacheTTL"))
+			return rsp, nil
+		}
+		rsp.Meta.Ttl = durationpb.New(dur)
 	}
 
 	//  Get the desired composed resources from the request.

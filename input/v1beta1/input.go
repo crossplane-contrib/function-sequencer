@@ -41,6 +41,13 @@ type Input struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// CacheTTL sets the time-to-live for the Function response.
+	// Function response caching is an alpha feature in Crossplane and can
+	// change in future releases.
+	// +optional
+	// +kubebuilder:default:="1m"
+	CacheTTL string `json:"cacheTTL,omitempty"`
+
 	// EnableDeletionSequencing controls the automatic creation of Usage/ClusterUsage resources from the dependency tree
 	// defined by the rule sequences.
 	// +kubebuilder:object:default=false
