@@ -96,26 +96,9 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 			if _, created := observedComposed[r]; created {
 				f.log.Debug("Processing ", "r:", r)
 				if in.EnableDeletionSequencing {
-					of := sequence[i-1]
-					ofRegex, err := getStrictRegex(string(of))
-					if err != nil {
-						response.Fatal(rsp, errors.Wrapf(err, "cannot compile regex %s", of))
+					if err := generateUsagesFromObserved(usages, observedComposed, sequence[i-1], r, in); err != nil {
+						response.Fatal(rsp, err)
 						return rsp, nil
-					}
-					for k := range desiredComposed {
-						if ofRegex.MatchString(string(k)) {
-							if _, ok := observedComposed[k]; ok {
-								f.log.Debug("Generate Usage", "of:", k, "by r:", r)
-								usage := GenerateUsage(&observedComposed[k].Resource.Unstructured, &observedComposed[r].Resource.Unstructured, in.ReplayDeletion, in.UsageVersion)
-								usageComposed := composed.New()
-								if err := convertViaJSON(usageComposed, usage); err != nil {
-									response.Fatal(rsp, errors.Wrapf(err, "cannot convert to JSON %s", usage))
-									return rsp, err
-								}
-								f.log.Debug("created usage", "kind", usageComposed.GetKind(), "name", usageComposed.GetName(), "namespace", usageComposed.GetNamespace())
-								usages[r+"-"+k+"-usage"] = &resource.DesiredComposed{Resource: usageComposed, Ready: resource.ReadyTrue}
-							}
-						}
 					}
 				}
 				// We've already created this resource, so we don't need to do anything.
@@ -152,6 +135,15 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					return rsp, nil
 				}
 
+				if in.EnableDeletionSequencing {
+					// Generate deletion usages from observed resources before any
+					// creation short-circuiting so dependencies remain stable during teardown.
+					if err := generateUsagesFromObserved(usages, observedComposed, before, r, in); err != nil {
+						response.Fatal(rsp, err)
+						return rsp, nil
+					}
+				}
+
 				if desired == 0 || desired != readyResources {
 					// no resource created
 					msg := fmt.Sprintf("Delaying creation of resource(s) matching %q because %q does not exist yet", r, before)
@@ -183,29 +175,54 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					}
 					break
 				}
-				if in.EnableDeletionSequencing {
-					for c, o := range observedComposed {
-						if currentRegex.MatchString(string(c)) && !isUsage(o, in.UsageVersion) {
-							for _, k := range keys {
-								f.log.Debug("Generate Usage of ", "k:", k, "by c:", c)
-								usage := GenerateUsage(&observedComposed[k].Resource.Unstructured, &o.Resource.Unstructured, in.ReplayDeletion, in.UsageVersion)
-								usageComposed := composed.New()
-								if err := convertViaJSON(usageComposed, usage); err != nil {
-									response.Fatal(rsp, errors.Wrapf(err, "cannot convert to JSON %s", usage))
-									return rsp, err
-								}
-								f.log.Debug("created usage", "kind", usageComposed.GetKind(), "name", usageComposed.GetName(), "namespace", usageComposed.GetNamespace())
-								usages[c+"-"+k+"-usage"] = &resource.DesiredComposed{Resource: usageComposed, Ready: resource.ReadyTrue}
-							}
-						}
-					}
-				}
 			}
 		}
 	}
 	maps.Copy(desiredComposed, usages)
 	rsp.Desired.Resources = nil
 	return rsp, response.SetDesiredComposedResources(rsp, desiredComposed)
+}
+
+func generateUsagesFromObserved(
+	usages map[resource.Name]*resource.DesiredComposed,
+	observedComposed map[resource.Name]resource.ObservedComposed,
+	ofPattern, byPattern resource.Name,
+	in *v1beta1.Input,
+) error {
+	ofRegex, err := getStrictRegex(string(ofPattern))
+	if err != nil {
+		return errors.Wrapf(err, "cannot compile regex %s", ofPattern)
+	}
+	byRegex, err := getStrictRegex(string(byPattern))
+	if err != nil {
+		return errors.Wrapf(err, "cannot compile regex %s", byPattern)
+	}
+
+	for byName, byObserved := range observedComposed {
+		if !byRegex.MatchString(string(byName)) || isUsage(byObserved, in.UsageVersion) {
+			continue
+		}
+		for ofName, ofObserved := range observedComposed {
+			if !ofRegex.MatchString(string(ofName)) || isUsage(ofObserved, in.UsageVersion) {
+				continue
+			}
+			usage := GenerateUsage(
+				&ofObserved.Resource.Unstructured,
+				&byObserved.Resource.Unstructured,
+				in.ReplayDeletion,
+				in.UsageVersion,
+			)
+			usageComposed := composed.New()
+			if err := convertViaJSON(usageComposed, usage); err != nil {
+				return errors.Wrapf(err, "cannot convert to JSON %s", usage)
+			}
+			usages[byName+"-"+ofName+"-usage"] = &resource.DesiredComposed{
+				Resource: usageComposed,
+				Ready:    resource.ReadyTrue,
+			}
+		}
+	}
+	return nil
 }
 
 func getStrictRegex(pattern string) (*regexp.Regexp, error) {
