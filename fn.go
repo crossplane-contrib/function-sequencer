@@ -122,7 +122,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 				// We only sequence creation of resources that don't exist yet.
 				continue
 			}
-			for _, before := range sequence[:i] {
+			for b, before := range sequence[:i] {
 				beforeRegex, err := getStrictRegex(string(before))
 				if err != nil {
 					response.Fatal(rsp, errors.Wrapf(err, "cannot compile regex %s", before))
@@ -183,7 +183,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					}
 					break
 				}
-				if in.EnableDeletionSequencing {
+				if b == i-1 && in.EnableDeletionSequencing {
 					for c, o := range observedComposed {
 						if currentRegex.MatchString(string(c)) && !isUsage(o, in.UsageVersion) {
 							for _, k := range keys {
