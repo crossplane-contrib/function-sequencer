@@ -187,8 +187,13 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					for c, o := range observedComposed {
 						if currentRegex.MatchString(string(c)) && !isUsage(o, in.UsageVersion) {
 							for _, k := range keys {
+								obs, ok := observedComposed[k]
+								if !ok {
+									f.log.Debug("Skipping usage; before-resource not yet observed", "k:", k, "by c:", c)
+									continue
+								}
 								f.log.Debug("Generate Usage of ", "k:", k, "by c:", c)
-								usage := GenerateUsage(&observedComposed[k].Resource.Unstructured, &o.Resource.Unstructured, in.ReplayDeletion, in.UsageVersion)
+								usage := GenerateUsage(&obs.Resource.Unstructured, &o.Resource.Unstructured, in.ReplayDeletion, in.UsageVersion)
 								usageComposed := composed.New()
 								if err := convertViaJSON(usageComposed, usage); err != nil {
 									response.Fatal(rsp, errors.Wrapf(err, "cannot convert to JSON %s", usage))

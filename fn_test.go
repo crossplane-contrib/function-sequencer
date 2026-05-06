@@ -1679,6 +1679,72 @@ func TestRunFunction(t *testing.T) {
 				},
 			},
 		},
+		"DeletionSequencingBeforeResourceNotObserved": {
+			reason: "The function should not panic when a before-resource is in desiredComposed but not in observedComposed with deletion sequencing enabled",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first-.*",
+									"second-.*",
+								},
+							},
+						},
+						UsageVersion: v1beta1.UsageV2,
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"second-foo": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first-foo": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-foo": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta:    &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first-foo": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-foo": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
 		"MarkCompositeNotReady": {
 			reason: "Set the Composite ready flag to false",
 			args: args{
