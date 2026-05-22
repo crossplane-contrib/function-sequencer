@@ -11,8 +11,8 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/logging"
-	apiextensionsv1beta1 "github.com/crossplane/crossplane/v2/apis/apiextensions/v1beta1"
-	protectionv1beta1 "github.com/crossplane/crossplane/v2/apis/protection/v1beta1"
+	apiextensionsv1beta1 "github.com/crossplane/crossplane/apis/v2/apiextensions/v1beta1"
+	protectionv1beta1 "github.com/crossplane/crossplane/apis/v2/protection/v1beta1"
 	"github.com/crossplane/function-sequencer/input/v1beta1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
