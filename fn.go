@@ -34,8 +34,8 @@ type Function struct {
 	log logging.Logger
 }
 
-// celEnv lazily initializes the shared CEL environment on first use.
-var celEnv = sync.OnceValues(func() (*cel.Env, error) {
+// getCELEnv lazily initializes the shared CEL environment on first use.
+var getCELEnv = sync.OnceValues(func() (*cel.Env, error) { //nolint:gochecknoglobals // lazy singleton
 	return cel.NewEnv(
 		cel.Types(&v1.State{}, &structpb.Struct{}),
 		cel.Variable("observed", cel.ObjectType("apiextensions.fn.proto.v1.State")),
@@ -46,7 +46,7 @@ var celEnv = sync.OnceValues(func() (*cel.Env, error) {
 
 // evaluateCondition evaluates a CEL expression against the function request.
 func (f *Function) evaluateCondition(req *v1.RunFunctionRequest, condition string) (bool, error) {
-	env, err := celEnv()
+	env, err := getCELEnv()
 	if err != nil {
 		return false, errors.Wrap(err, "cannot create CEL environment")
 	}

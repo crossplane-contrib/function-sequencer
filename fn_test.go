@@ -2615,11 +2615,11 @@ func TestRunFunctionConditionErrors(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if len(rsp.Results) == 0 {
+			if len(rsp.GetResults()) == 0 {
 				t.Fatal("expected at least one result")
 			}
-			if rsp.Results[0].Severity != v1.Severity_SEVERITY_FATAL {
-				t.Errorf("%s: expected FATAL severity, got %s", tc.reason, rsp.Results[0].Severity)
+			if rsp.GetResults()[0].GetSeverity() != v1.Severity_SEVERITY_FATAL {
+				t.Errorf("%s: expected FATAL severity, got %s", tc.reason, rsp.GetResults()[0].GetSeverity())
 			}
 		})
 	}
