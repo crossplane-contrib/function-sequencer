@@ -152,6 +152,107 @@ those defined by pattern matching.  For example:
 creates a `Usage` resource for every resource that matches `first-subresource-*`, with `by` set to the `second-resource`.
 This ensures that `second-resource` is deleted before any of the `first-resource-*` resources are deleted.
 
+## Delete-Only Mode
+
+By default, sequencing rules enforce ordering for both resource creation and deletion (if `enableDeletionSequencing`).
+When `deleteOnly` is set to `true` on a rule, creation sequencing is skipped and resources are not blocked from being created,
+even if their predecessors aren't ready (think of it as "rely on eventual consistency" mode).
+Deletion ordering is still enforced via `Usage`/`ClusterUsage` resources when `enableDeletionSequencing` is also enabled.
+
+This is useful when you want to rely on eventual consistency for resource creation, but still need guaranteed deletion ordering.
+
+```yaml
+  - step: sequence-deletion-only
+    functionRef:
+      name: function-sequencer
+    input:
+      apiVersion: sequencer.fn.crossplane.io/v1beta1
+      kind: Input
+      enableDeletionSequencing: true
+      rules:
+        - sequence:
+          - vpc
+          - subnet
+          - security-group
+          deleteOnly: true
+```
+
+In the example above, `subnet` and `security-group` will be created immediately without waiting for predecessors.
+On deletion, `Usage` resources enforce the reverse order: `security-group` --> `subnet` --> `vpc`.
+
+The `deleteOnly` flag is per-rule, so you can mix creation-sequenced and delete-only rules in the same composition:
+
+```yaml
+      rules:
+        - sequence:
+          - vpc
+          - subnet
+        - sequence:
+          - subnet
+          - security-group
+          deleteOnly: true
+```
+
+## Conditional Sequences
+
+Rules can include a `condition` field containing a [CEL](https://github.com/google/cel-spec) (Common Expression Language) expression.
+When the condition evaluates to `false`, the entire sequence is skipped and no resources are blocked/removed from the desired state.
+
+This is useful when a sequence involves resources that are conditionally created based on the XR parameters.
+Without a condition, a resource that is never created would permanently block all successors in its sequence.
+
+```yaml
+  - step: sequence-creation
+    functionRef:
+      name: function-sequencer
+    input:
+      apiVersion: sequencer.fn.crossplane.io/v1beta1
+      kind: Input
+      enableDeletionSequencing: true
+      rules:
+        - sequence:
+          - vpc
+          - subnet
+        - sequence:
+          - subnet
+          - nat-gateway
+          condition: "observed.composite.resource.spec.enableNatGateway == true"
+```
+
+When `spec.enableNatGateway` is `false`, the second sequence is skipped entirely.
+The `nat-gateway` resource is not blocked, and it does not affect composite readiness.
+
+### CEL Variables
+
+The following variables are available in condition expressions, matching the conventions used by
+[function-cel-filter](https://github.com/crossplane-contrib/function-cel-filter):
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `observed` | `State` | The observed state of the composite and composed resources |
+| `desired` | `State` | The desired state as accumulated by prior pipeline steps |
+| `context` | `Struct` | The function pipeline context |
+
+Common access patterns:
+
+```cel
+observed.composite.resource.spec.someField == "value"
+desired.composite.resource.spec.count > 0
+size(observed.resources) > 0
+```
+
+### Safety: Observed Resource Protection
+
+When a condition evaluates to `false` but resources from the sequence already exist (they were created when the
+condition was previously `true`), deletion ordering is still enforced. `Usage`/`ClusterUsage` resources continue to
+be generated for observed resources regardless of the condition. This prevents resources from being deleted out of
+order when a condition changes at runtime.
+
+### CEL Environment
+
+The CEL environment is lazily initialized, thus there is zero overhead for compositions that do not use conditions.
+The environment is created once on first use and reused for subsequent evaluations.
+
 ## Installation
 
 The function can be installed into a Crossplane cluster using the following manifest:

@@ -7,6 +7,7 @@ import (
 	"maps"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
@@ -14,7 +15,9 @@ import (
 	apiextensionsv1beta1 "github.com/crossplane/crossplane/apis/v2/apiextensions/v1beta1"
 	protectionv1beta1 "github.com/crossplane/crossplane/apis/v2/protection/v1beta1"
 	"github.com/crossplane/function-sequencer/input/v1beta1"
+	"github.com/google/cel-go/cel"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/structpb"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	v1 "github.com/crossplane/function-sdk-go/proto/v1"
@@ -29,6 +32,52 @@ type Function struct {
 	v1.UnimplementedFunctionRunnerServiceServer
 
 	log logging.Logger
+}
+
+// celEnv lazily initializes the shared CEL environment on first use.
+var celEnv = sync.OnceValues(func() (*cel.Env, error) {
+	return cel.NewEnv(
+		cel.Types(&v1.State{}, &structpb.Struct{}),
+		cel.Variable("observed", cel.ObjectType("apiextensions.fn.proto.v1.State")),
+		cel.Variable("desired", cel.ObjectType("apiextensions.fn.proto.v1.State")),
+		cel.Variable("context", cel.ObjectType("google.protobuf.Struct")),
+	)
+})
+
+// evaluateCondition evaluates a CEL expression against the function request.
+func (f *Function) evaluateCondition(req *v1.RunFunctionRequest, condition string) (bool, error) {
+	env, err := celEnv()
+	if err != nil {
+		return false, errors.Wrap(err, "cannot create CEL environment")
+	}
+	ast, iss := env.Parse(condition)
+	if iss.Err() != nil {
+		return false, errors.Wrap(iss.Err(), "cannot parse CEL condition")
+	}
+	checked, iss := env.Check(ast)
+	if iss.Err() != nil {
+		return false, errors.Wrap(iss.Err(), "cannot type-check CEL condition")
+	}
+	if !checked.OutputType().IsExactType(cel.BoolType) {
+		return false, errors.Errorf("CEL condition must return bool, got %s", checked.OutputType())
+	}
+	program, err := env.Program(checked)
+	if err != nil {
+		return false, errors.Wrap(err, "cannot compile CEL condition")
+	}
+	result, _, err := program.Eval(map[string]any{
+		"observed": req.GetObserved(),
+		"desired":  req.GetDesired(),
+		"context":  req.GetContext(),
+	})
+	if err != nil {
+		return false, errors.Wrap(err, "cannot evaluate CEL condition")
+	}
+	ret, ok := result.Value().(bool)
+	if !ok {
+		return false, errors.New("CEL condition result is not bool")
+	}
+	return ret, nil
 }
 
 const (
@@ -81,13 +130,30 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 		return rsp, nil
 	}
 
-	sequences := make([][]resource.Name, 0, len(in.Rules))
-	for _, rule := range in.Rules {
-		sequences = append(sequences, rule.Sequence)
-	}
 	usages := make(map[resource.Name]*resource.DesiredComposed)
 
-	for _, sequence := range sequences {
+	for _, rule := range in.Rules {
+		sequence := rule.Sequence
+
+		if rule.Condition != "" {
+			conditionMet, err := f.evaluateCondition(req, rule.Condition)
+			if err != nil {
+				response.Fatal(rsp, errors.Wrapf(err, "cannot evaluate condition %q for sequence %v", rule.Condition, sequence))
+				return rsp, nil
+			}
+			if !conditionMet {
+				f.log.Debug("Skipping sequence due to false condition", "condition", rule.Condition, "sequence", sequence)
+				response.Normal(rsp, fmt.Sprintf("Skipping sequence %v: condition %q evaluated to false", sequence, rule.Condition))
+				if in.EnableDeletionSequencing {
+					if err := f.generateObservedUsages(sequence, observedComposed, desiredComposed, usages, in.ReplayDeletion, in.UsageVersion); err != nil {
+						response.Fatal(rsp, errors.Wrap(err, "cannot generate usages for skipped sequence"))
+						return rsp, err
+					}
+				}
+				continue
+			}
+		}
+
 		for i, r := range sequence {
 			if i == 0 {
 				// We don't need to do anything for the first resource in the sequence.
@@ -120,6 +186,9 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 				}
 				// We've already created this resource, so we don't need to do anything.
 				// We only sequence creation of resources that don't exist yet.
+				continue
+			}
+			if rule.DeleteOnly {
 				continue
 			}
 			for b, before := range sequence[:i] {
@@ -212,6 +281,48 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 	maps.Copy(desiredComposed, usages)
 	rsp.Desired.Resources = nil
 	return rsp, response.SetDesiredComposedResources(rsp, desiredComposed)
+}
+
+// generateObservedUsages creates Usage/ClusterUsage resources for observed resources in a sequence,
+// protecting deletion order even when the sequence is skipped (e.g. condition evaluates to false).
+func (f *Function) generateObservedUsages(
+	sequence []resource.Name,
+	observedComposed map[resource.Name]resource.ObservedComposed,
+	desiredComposed map[resource.Name]*resource.DesiredComposed,
+	usages map[resource.Name]*resource.DesiredComposed,
+	replayDeletion bool,
+	usageVersion v1beta1.UsageVersion,
+) error {
+	for i := 1; i < len(sequence); i++ {
+		rRegex, err := getStrictRegex(string(sequence[i]))
+		if err != nil {
+			return errors.Wrapf(err, "cannot compile regex %s", sequence[i])
+		}
+		ofRegex, err := getStrictRegex(string(sequence[i-1]))
+		if err != nil {
+			return errors.Wrapf(err, "cannot compile regex %s", sequence[i-1])
+		}
+		for c, o := range observedComposed {
+			if !rRegex.MatchString(string(c)) || isUsage(o, usageVersion) {
+				continue
+			}
+			for k := range desiredComposed {
+				if !ofRegex.MatchString(string(k)) {
+					continue
+				}
+				if obs, ok := observedComposed[k]; ok {
+					f.log.Debug("Generate Usage for observed resource", "of:", k, "by:", c)
+					usage := GenerateUsage(&obs.Resource.Unstructured, &o.Resource.Unstructured, replayDeletion, usageVersion)
+					usageComposed := composed.New()
+					if err := convertViaJSON(usageComposed, usage); err != nil {
+						return errors.Wrapf(err, "cannot convert to JSON %s", usage)
+					}
+					usages[c+"-"+k+"-usage"] = &resource.DesiredComposed{Resource: usageComposed, Ready: resource.ReadyTrue}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func getStrictRegex(pattern string) (*regexp.Regexp, error) {

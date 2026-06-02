@@ -1927,6 +1927,532 @@ func TestRunFunction(t *testing.T) {
 				},
 			},
 		},
+		"ConditionTrueRunsNormally": {
+			reason: "When condition evaluates to true, normal sequencing should apply — second blocked because first not ready",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+								Condition: `observed.composite.resource.spec.count == 2.0`,
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{
+						{
+							Severity: v1.Severity_SEVERITY_NORMAL,
+							Message:  `Delaying creation of resource(s) matching "second" because "first" is not fully ready (0 of 1)`,
+							Target:   &target,
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
+		"ConditionFalseSkipsSequence": {
+			reason: "When condition evaluates to false, sequence should be skipped — second stays in desired and composite readiness is not reset even with resetCompositeReadiness=true",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						ResetCompositeReadiness: true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+								Condition: `observed.composite.resource.spec.count == 999.0`,
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{
+						{
+							Severity: v1.Severity_SEVERITY_NORMAL,
+							Message:  `Skipping sequence [first second]: condition "observed.composite.resource.spec.count == 999.0" evaluated to false`,
+							Target:   &target,
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
+		"ConditionEmptyPassesThrough": {
+			reason: "Empty condition string should behave identically to no condition — normal sequencing",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+								Condition: "",
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{
+						{
+							Severity: v1.Severity_SEVERITY_NORMAL,
+							Message:  `Delaying creation of resource(s) matching "second" because "first" is not fully ready (0 of 1)`,
+							Target:   &target,
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
+		"ConditionFalseProtectsObservedUsages": {
+			reason: "When condition is false but resources are observed and deletion sequencing is enabled, Usages must still be generated",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+								Condition: `observed.composite.resource.spec.count == 999.0`,
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{
+						{
+							Severity: v1.Severity_SEVERITY_NORMAL,
+							Message:  `Skipping sequence [first second]: condition "observed.composite.resource.spec.count == 999.0" evaluated to false`,
+							Target:   &target,
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-first-usage": {
+								Resource: resource.MustStructJSON(uv2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
+		"ConditionFalseNoObservedNoUsages": {
+			reason: "When condition is false and no resources are observed, no Usages should be generated",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+								Condition: `observed.composite.resource.spec.count == 999.0`,
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{
+						{
+							Severity: v1.Severity_SEVERITY_NORMAL,
+							Message:  `Skipping sequence [first second]: condition "observed.composite.resource.spec.count == 999.0" evaluated to false`,
+							Target:   &target,
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
+		"ConditionFalseNoDeletionSequencing": {
+			reason: "When condition is false and enableDeletionSequencing is false, no Usages even with observed resources",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: false,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+								Condition: `observed.composite.resource.spec.count == 999.0`,
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{
+						{
+							Severity: v1.Severity_SEVERITY_NORMAL,
+							Message:  `Skipping sequence [first second]: condition "observed.composite.resource.spec.count == 999.0" evaluated to false`,
+							Target:   &target,
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
+		"DeleteOnlySkipsCreationBlockingNoUsagesNoReadinessReset": {
+			reason: "With deleteOnly=true and no deletion sequencing: resources are not blocked even when predecessors are not ready, no Usages are generated, and composite readiness is not reset even with resetCompositeReadiness=true",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						ResetCompositeReadiness: true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+								DeleteOnly: true,
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
+		"DeleteOnlyGeneratesUsages": {
+			reason: "With deleteOnly=true and enableDeletionSequencing=true, Usage resources should still be created for observed resources",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+								DeleteOnly: true,
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-first-usage": {
+								Resource: resource.MustStructJSON(uv2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for name, tc := range cases {
@@ -2038,6 +2564,62 @@ func TestRunFunctionCacheTTL(t *testing.T) {
 			}
 			if diff := cmp.Diff(nil, err, cmpopts.EquateErrors()); diff != "" {
 				t.Errorf("%s\nf.RunFunction(...): -want err, +got err:\n%s", tc.reason, diff)
+			}
+		})
+	}
+}
+
+func TestRunFunctionConditionErrors(t *testing.T) {
+	xr := `{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"count":2}}`
+	mr := `{"apiVersion":"example.org/v1","kind":"MR","metadata":{"name":"cool-mr"}}`
+
+	cases := map[string]struct {
+		reason    string
+		condition string
+	}{
+		"InvalidExpression": {
+			reason:    "Invalid CEL syntax should produce Fatal",
+			condition: `invalid $$$ expression`,
+		},
+		"NonBoolResult": {
+			reason:    "CEL expression returning non-bool should produce Fatal",
+			condition: `observed.composite.resource.spec.count`,
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := &Function{log: logging.NewNopLogger()}
+			req := &v1.RunFunctionRequest{
+				Input: resource.MustStructObject(&v1beta1.Input{
+					Rules: []v1beta1.SequencingRule{
+						{
+							Sequence:  []resource.Name{"first", "second"},
+							Condition: tc.condition,
+						},
+					},
+				}),
+				Observed: &v1.State{
+					Composite: &v1.Resource{Resource: resource.MustStructJSON(xr)},
+					Resources: map[string]*v1.Resource{},
+				},
+				Desired: &v1.State{
+					Composite: &v1.Resource{Resource: resource.MustStructJSON(xr)},
+					Resources: map[string]*v1.Resource{
+						"first":  {Resource: resource.MustStructJSON(mr)},
+						"second": {Resource: resource.MustStructJSON(mr)},
+					},
+				},
+			}
+			rsp, err := f.RunFunction(context.Background(), req)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(rsp.Results) == 0 {
+				t.Fatal("expected at least one result")
+			}
+			if rsp.Results[0].Severity != v1.Severity_SEVERITY_FATAL {
+				t.Errorf("%s: expected FATAL severity, got %s", tc.reason, rsp.Results[0].Severity)
 			}
 		})
 	}

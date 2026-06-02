@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.1
   name: inputs.sequencer.fn.crossplane.io
 spec:
   group: sequencer.fn.crossplane.io
@@ -29,6 +29,7 @@ spec:
               More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           cacheTTL:
+            default: 1m
             description: |-
               CacheTTL sets the time-to-live for the Function response.
               Function response caching is an alpha feature in Crossplane and can
@@ -62,6 +63,20 @@ spec:
             items:
               description: SequencingRule is a rule that describes a sequence of resources.
               properties:
+                condition:
+                  description: |-
+                    Condition is a CEL expression evaluated against the function request state.
+                    When set and evaluates to false, the entire sequence is skipped for creation
+                    sequencing. Available variables: observed, desired, context (matching
+                    function-cel-filter conventions).
+                    Example: observed.composite.resource.spec.enableFeatureX == true
+                  type: string
+                deleteOnly:
+                  description: |-
+                    DeleteOnly skips creation sequencing for this rule.
+                    Resources are not blocked from creation; only deletion ordering
+                    (via Usage/ClusterUsage) is enforced when enableDeletionSequencing is true.
+                  type: boolean
                 sequence:
                   description: Sequence is a list of composition resource names.
                   items:
