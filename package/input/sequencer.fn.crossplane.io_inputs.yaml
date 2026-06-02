@@ -67,15 +67,13 @@ spec:
                   description: |-
                     Condition is a CEL expression evaluated against the function request state.
                     When set and evaluates to false, the entire sequence is skipped for creation
-                    sequencing. Available variables: observed, desired, context (matching
-                    function-cel-filter conventions).
+                    sequencing. Available variables: observed, desired, context (matching function-cel-filter conventions).
                     Example: observed.composite.resource.spec.enableFeatureX == true
                   type: string
                 deleteOnly:
                   description: |-
                     DeleteOnly skips creation sequencing for this rule.
-                    Resources are not blocked from creation; only deletion ordering
-                    (via Usage/ClusterUsage) is enforced when enableDeletionSequencing is true.
+                    Resources are not blocked from creation; only deletion ordering (via Usage/ClusterUsage) is enforced when enableDeletionSequencing is true.
                   type: boolean
                 sequence:
                   description: Sequence is a list of composition resource names.
