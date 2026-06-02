@@ -243,10 +243,11 @@ size(observed.resources) > 0
 
 ### Safety: Observed Resource Protection
 
-When a condition evaluates to `false` but resources from the sequence already exist (they were created when the
-condition was previously `true`), deletion ordering is still enforced. `Usage`/`ClusterUsage` resources continue to
-be generated for observed resources regardless of the condition. This prevents resources from being deleted out of
-order when a condition changes at runtime.
+When a condition evaluates to `false`, but resources from the sequence already exist (they were created when the condition was previously `true`),
+deletion ordering is still enforced.
+That is, (`Cluster`)`Usage` resources continue to be generated for observed resources, regardless of the condition.
+
+This prevents resources from being deleted out of order when a condition changes at runtime (e.g. a flaky condition).
 
 ### CEL Environment
 
