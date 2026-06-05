@@ -58,7 +58,7 @@ func (f *Function) evaluateCondition(req *v1.RunFunctionRequest, condition strin
 	if iss.Err() != nil {
 		return false, errors.Wrap(iss.Err(), "cannot type-check CEL condition")
 	}
-	if !checked.OutputType().IsExactType(cel.BoolType) {
+	if !checked.OutputType().IsExactType(cel.BoolType) && !checked.OutputType().IsExactType(cel.DynType) {
 		return false, errors.Errorf("CEL condition must return bool, got %s", checked.OutputType())
 	}
 	program, err := env.Program(checked)

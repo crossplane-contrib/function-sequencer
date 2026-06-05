@@ -1986,6 +1986,127 @@ func TestRunFunction(t *testing.T) {
 				},
 			},
 		},
+		"ConditionDynBoolTrueRunsNormally": {
+			reason: "When condition navigates into Struct fields (dyn type) and evaluates to true, normal sequencing should apply",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+								Condition: `observed.composite.resource.spec.parameters.multiAZ == true`,
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"parameters":{"multiAZ":true}}}`),
+						},
+						Resources: map[string]*v1.Resource{},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"parameters":{"multiAZ":true}}}`),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{
+						{
+							Severity: v1.Severity_SEVERITY_NORMAL,
+							Message:  `Delaying creation of resource(s) matching "second" because "first" is not fully ready (0 of 1)`,
+							Target:   &target,
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"parameters":{"multiAZ":true}}}`),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
+		"ConditionDynBoolFalseSkipsSequence": {
+			reason: "When condition navigates into Struct fields (dyn type) and evaluates to false, sequence should be skipped",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+								},
+								Condition: `observed.composite.resource.spec.parameters.multiAZ == true`,
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"parameters":{"multiAZ":false}}}`),
+						},
+						Resources: map[string]*v1.Resource{},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"parameters":{"multiAZ":false}}}`),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{
+						{
+							Severity: v1.Severity_SEVERITY_NORMAL,
+							Message:  `Skipping sequence [first second]: condition "observed.composite.resource.spec.parameters.multiAZ == true" evaluated to false`,
+							Target:   &target,
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(`{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr"},"spec":{"parameters":{"multiAZ":false}}}`),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(mr),
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+							},
+						},
+					},
+				},
+			},
+		},
 		"ConditionFalseSkipsSequence": {
 			reason: "When condition evaluates to false, sequence should be skipped — second stays in desired and composite readiness is not reset even with resetCompositeReadiness=true",
 			args: args{
