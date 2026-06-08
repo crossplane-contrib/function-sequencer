@@ -145,6 +145,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 				f.log.Debug("Skipping sequence due to false condition", "condition", rule.Condition, "sequence", sequence)
 				response.Normal(rsp, fmt.Sprintf("Skipping sequence %v: condition %q evaluated to false", sequence, rule.Condition))
 				if in.EnableDeletionSequencing {
+					// Still generate Usages for already-observed resources so deletion order is preserved even when the sequence is skipped.
 					if err := f.generateObservedUsages(sequence, observedComposed, desiredComposed, usages, in.ReplayDeletion, in.UsageVersion); err != nil {
 						response.Fatal(rsp, errors.Wrap(err, "cannot generate usages for skipped sequence"))
 						return rsp, err
