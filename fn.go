@@ -140,7 +140,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 				desired := len(keys)
 				readyResources := 0
 				for _, k := range keys {
-					if b, ok := desiredComposed[k]; ok && b.Ready == resource.ReadyTrue {
+					if d, ok := desiredComposed[k]; ok && d.Ready == resource.ReadyTrue {
 						// resource is ready, add it to the counter
 						readyResources++
 					}
@@ -183,6 +183,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					}
 					break
 				}
+				// Only create Usages of the previous (i-1) resource in the sequence.
 				if b == i-1 && in.EnableDeletionSequencing {
 					for c, o := range observedComposed {
 						if currentRegex.MatchString(string(c)) && !isUsage(o, in.UsageVersion) {

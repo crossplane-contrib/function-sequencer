@@ -565,7 +565,7 @@ func TestRunFunction(t *testing.T) {
 			},
 		},
 		"SequenceRegexNotAllReady": {
-			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			reason: "The function should delay the creation of the second resource because the first-2 resource is not ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
@@ -719,7 +719,7 @@ func TestRunFunction(t *testing.T) {
 			},
 		},
 		"SequenceRegexFirstGroupReady": {
-			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			reason: "The function should delay the creation of the third resource because the second-1 resource is not ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
@@ -810,7 +810,7 @@ func TestRunFunction(t *testing.T) {
 			},
 		},
 		"MixedRegex": {
-			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			reason: "The function should delay the creation of the third resource because the second-1 resource is not ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
@@ -1344,7 +1344,7 @@ func TestRunFunction(t *testing.T) {
 			},
 		},
 		"MixedRegexUsageV1": {
-			reason: "The function should create all resources and their Usages",
+			reason: "The function should create all resources and their V1 Usages because all desired resources are ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
@@ -1455,8 +1455,8 @@ func TestRunFunction(t *testing.T) {
 				},
 			},
 		},
-		"MixedRegexUsageCase2": {
-			reason: "The function should create all resources and Usages only for the prior element",
+		"MixedRegexUsagePriorElementOnly": {
+			reason: "The function should create all resources and Usages only for the prior element when regex is used",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
@@ -1564,7 +1564,7 @@ func TestRunFunction(t *testing.T) {
 			},
 		},
 		"MixedRegexUsageV2Cluster": {
-			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			reason: "The function should create all resources and Usages because all desired resources are ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
@@ -1676,7 +1676,7 @@ func TestRunFunction(t *testing.T) {
 			},
 		},
 		"MixedRegexUsageV2Namespaced": {
-			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			reason: "The function should create all resources and Usages because all desired resources are ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
