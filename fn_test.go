@@ -565,7 +565,7 @@ func TestRunFunction(t *testing.T) {
 			},
 		},
 		"SequenceRegexNotAllReady": {
-			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			reason: "The function should delay the creation of the second resource because the first-2 resource is not ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
@@ -719,7 +719,7 @@ func TestRunFunction(t *testing.T) {
 			},
 		},
 		"SequenceRegexFirstGroupReady": {
-			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			reason: "The function should delay the creation of the third resource because the second-1 resource is not ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
@@ -810,7 +810,7 @@ func TestRunFunction(t *testing.T) {
 			},
 		},
 		"MixedRegex": {
-			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			reason: "The function should delay the creation of the third resource because the second-1 resource is not ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
@@ -1344,7 +1344,7 @@ func TestRunFunction(t *testing.T) {
 			},
 		},
 		"MixedRegexUsageV1": {
-			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			reason: "The function should create all resources and their V1 Usages because all desired resources are ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
@@ -1455,8 +1455,116 @@ func TestRunFunction(t *testing.T) {
 				},
 			},
 		},
+		"MixedRegexUsagePriorElementOnly": {
+			reason: "The function should create all resources and Usages only for the prior element when regex is used",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence: []resource.Name{
+									"first",
+									"second",
+									"third-.*",
+								},
+							},
+						},
+						UsageVersion: v1beta1.UsageV1,
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta:    &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-0": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"second-first-usage": {
+								Resource: resource.MustStructJSON(uv1),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-0-second-usage": {
+								Resource: resource.MustStructJSON(u2v1),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-1-second-usage": {
+								Resource: resource.MustStructJSON(u2v1),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"third-1": {
+								Resource: resource.MustStructJSON(mr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
 		"MixedRegexUsageV2Cluster": {
-			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			reason: "The function should create all resources and Usages because all desired resources are ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{
@@ -1568,7 +1676,7 @@ func TestRunFunction(t *testing.T) {
 			},
 		},
 		"MixedRegexUsageV2Namespaced": {
-			reason: "The function should delay the creation of second and fourth resources because the first and third are not ready",
+			reason: "The function should create all resources and Usages because all desired resources are ready",
 			args: args{
 				req: &v1.RunFunctionRequest{
 					Input: resource.MustStructObject(&v1beta1.Input{

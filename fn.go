@@ -122,7 +122,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 				// We only sequence creation of resources that don't exist yet.
 				continue
 			}
-			for _, before := range sequence[:i] {
+			for b, before := range sequence[:i] {
 				beforeRegex, err := getStrictRegex(string(before))
 				if err != nil {
 					response.Fatal(rsp, errors.Wrapf(err, "cannot compile regex %s", before))
@@ -140,7 +140,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 				desired := len(keys)
 				readyResources := 0
 				for _, k := range keys {
-					if b, ok := desiredComposed[k]; ok && b.Ready == resource.ReadyTrue {
+					if d, ok := desiredComposed[k]; ok && d.Ready == resource.ReadyTrue {
 						// resource is ready, add it to the counter
 						readyResources++
 					}
@@ -183,7 +183,8 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					}
 					break
 				}
-				if in.EnableDeletionSequencing {
+				// Only create Usages of the previous (i-1) resource in the sequence.
+				if b == i-1 && in.EnableDeletionSequencing {
 					for c, o := range observedComposed {
 						if currentRegex.MatchString(string(c)) && !isUsage(o, in.UsageVersion) {
 							for _, k := range keys {
