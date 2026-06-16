@@ -135,6 +135,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 	for _, rule := range in.Rules {
 		sequence := rule.Sequence
 
+		// Evaluate the optional CEL condition to determine if this sequence should be processed.
 		skipSequence := false
 		if rule.Condition != "" {
 			conditionMet, err := f.evaluateCondition(req, rule.Condition)
@@ -149,7 +150,11 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 			}
 		}
 
-		// Generate Usages before checking skipSequence so deletion order is preserved even when the sequence is skipped.
+		// Generate Usages for all already-observed resource pairs in this sequence.
+		// This runs before checking skipSequence so that deletion order is preserved
+		// even when the sequence condition evaluates to false.
+		// Safe to run early: it only touches resources in observedComposed, while the
+		// creation-sequencing loop below only removes not-yet-observed resources from desiredComposed.
 		if in.EnableDeletionSequencing {
 			if err := f.generateObservedUsages(sequence, observedComposed, desiredComposed, usages, in.ReplayDeletion, in.UsageVersion); err != nil {
 				response.Fatal(rsp, errors.Wrap(err, "cannot generate usages for sequence"))
@@ -161,25 +166,30 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 			continue
 		}
 
+		// Creation sequencing: for each resource in the sequence (after the first),
+		// check that all predecessor resources exist and are ready before allowing creation.
 		for i, r := range sequence {
 			if i == 0 {
-				// We don't need to do anything for the first resource in the sequence.
 				continue
 			}
+			// Already exists in the cluster, no creation sequencing needed.
 			if _, created := observedComposed[r]; created {
 				f.log.Debug("Skipping already created resource", "r:", r)
 				continue
 			}
+			// DeleteOnly rules only generate usages (handled above), never block creation.
 			if rule.DeleteOnly {
 				f.log.Debug("Skipping resource creation due to deleteOnly rule", "r:", r)
 				continue
 			}
+			// Check each predecessor in the sequence to see if it exists and is ready.
 			for _, before := range sequence[:i] {
 				beforeRegex, err := getStrictRegex(string(before))
 				if err != nil {
 					response.Fatal(rsp, errors.Wrapf(err, "cannot compile regex %s", before))
 					return rsp, nil
 				}
+				// Collect all desired resources matching the predecessor pattern.
 				keys := []resource.Name{}
 				for k := range desiredComposed {
 					if beforeRegex.MatchString(string(k)) {
@@ -187,13 +197,11 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					}
 				}
 
-				// We'll treat everything the same way adding all resources to the keys slice
-				// and then checking if they are ready.
+				// Count how many predecessor resources are ready.
 				desired := len(keys)
 				readyResources := 0
 				for _, k := range keys {
 					if d, ok := desiredComposed[k]; ok && d.Ready == resource.ReadyTrue {
-						// resource is ready, add it to the counter
 						readyResources++
 					}
 				}
@@ -204,11 +212,10 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					return rsp, nil
 				}
 
+				// Predecessor not ready: delay creation by removing the current resource from desired.
 				if desired == 0 || desired != readyResources {
-					// no resource created
 					msg := fmt.Sprintf("Delaying creation of resource(s) matching %q because %q does not exist yet", r, before)
 					if desired > 0 {
-						// provide a nicer message if there are resources.
 						msg = fmt.Sprintf(
 							"Delaying creation of resource(s) matching %q because %q is not fully ready (%d of %d)",
 							r,
@@ -219,16 +226,15 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					}
 					response.Normal(rsp, msg)
 					f.log.Debug(msg)
-					// find all objects that match the regex and delete them from the desiredComposed map
+					// Remove not-yet-observed resources matching r from desired to prevent premature creation.
 					for k := range desiredComposed {
 						if currentRegex.MatchString(string(k)) {
 							if _, ok := observedComposed[k]; ok {
-								// if the resource is already part of the observedComposed, we should not delete it
+								// Already exists in the cluster; keep it in desired.
 								continue
 							}
 							delete(desiredComposed, k)
 							if in.ResetCompositeReadiness {
-								// Reset the composite ready indicator to false when a desired resource is deleted.
 								rsp.Desired.Composite.Ready = v1.Ready_READY_FALSE
 							}
 						}
@@ -238,6 +244,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 			}
 		}
 	}
+	// Merge generated usages into desired resources before returning.
 	maps.Copy(desiredComposed, usages)
 	rsp.Desired.Resources = nil
 	return rsp, response.SetDesiredComposedResources(rsp, desiredComposed)
