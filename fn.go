@@ -170,6 +170,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 		// check that all predecessor resources exist and are ready before allowing creation.
 		for i, r := range sequence {
 			if i == 0 {
+				// We don't need to do anything for the first resource in the sequence.
 				continue
 			}
 			// Already exists in the cluster, no creation sequencing needed.
@@ -197,11 +198,13 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					}
 				}
 
-				// Count how many predecessor resources are ready.
+				// We'll treat everything the same way adding all resources to the keys slice
+				// and then checking if they are ready.
 				desired := len(keys)
 				readyResources := 0
 				for _, k := range keys {
 					if d, ok := desiredComposed[k]; ok && d.Ready == resource.ReadyTrue {
+						// resource is ready, add it to the counter
 						readyResources++
 					}
 				}
@@ -214,8 +217,10 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 
 				// Predecessor not ready: delay creation by removing the current resource from desired.
 				if desired == 0 || desired != readyResources {
+					// no resource created
 					msg := fmt.Sprintf("Delaying creation of resource(s) matching %q because %q does not exist yet", r, before)
 					if desired > 0 {
+						// provide a nicer message if there are resources.
 						msg = fmt.Sprintf(
 							"Delaying creation of resource(s) matching %q because %q is not fully ready (%d of %d)",
 							r,
@@ -226,11 +231,11 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					}
 					response.Normal(rsp, msg)
 					f.log.Debug(msg)
-					// Remove not-yet-observed resources matching r from desired to prevent premature creation.
+					// find all objects that match the regex and delete them from the desiredComposed map
 					for k := range desiredComposed {
 						if currentRegex.MatchString(string(k)) {
 							if _, ok := observedComposed[k]; ok {
-								// Already exists in the cluster; keep it in desired.
+								// if the resource is already part of the observedComposed, we should not delete it
 								continue
 							}
 							delete(desiredComposed, k)
