@@ -1,6 +1,6 @@
 module github.com/crossplane/function-sequencer
 
-go 1.26.0
+go 1.26.4
 
 require (
 	github.com/alecthomas/kong v1.15.0
@@ -10,7 +10,7 @@ require (
 	github.com/google/cel-go v0.28.1
 	github.com/google/go-cmp v0.7.0
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
-	k8s.io/apimachinery v0.36.0
+	k8s.io/apimachinery v0.36.2
 	sigs.k8s.io/controller-tools v0.21.0
 )
 
@@ -85,7 +85,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/api v0.36.0 // indirect
+	k8s.io/api v0.36.2 // indirect
 	k8s.io/apiextensions-apiserver v0.36.0 // indirect
 	k8s.io/client-go v0.36.0 // indirect
 	k8s.io/code-generator v0.36.0 // indirect
