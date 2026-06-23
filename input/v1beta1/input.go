@@ -18,6 +18,18 @@ type SequencingRule struct {
 	// TODO: Should we add a way to infer sequencing from usages? e.g. InferFromUsages: true
 	// InferFromUsages bool            `json:"inferFromUsages,omitempty"`
 
+	// Condition is a CEL expression evaluated against the function request state.
+	// When set and evaluates to false, the entire sequence is skipped for creation
+	// sequencing. Available variables: observed, desired, context (matching function-cel-filter conventions).
+	// Example: observed.composite.resource.spec.enableFeatureX == true
+	// +optional
+	Condition string `json:"condition,omitempty"`
+
+	// DeleteOnly skips creation sequencing for this rule.
+	// Resources are not blocked from creation; only deletion ordering (via Usage/ClusterUsage) is enforced when enableDeletionSequencing is true.
+	// +optional
+	DeleteOnly bool `json:"deleteOnly,omitempty"`
+
 	// Sequence is a list of composition resource names.
 	Sequence []resource.Name `json:"sequence,omitempty"`
 }

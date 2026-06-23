@@ -7,6 +7,7 @@ import (
 	"maps"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
@@ -14,7 +15,9 @@ import (
 	apiextensionsv1beta1 "github.com/crossplane/crossplane/apis/v2/apiextensions/v1beta1"
 	protectionv1beta1 "github.com/crossplane/crossplane/apis/v2/protection/v1beta1"
 	"github.com/crossplane/function-sequencer/input/v1beta1"
+	"github.com/google/cel-go/cel"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/structpb"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	v1 "github.com/crossplane/function-sdk-go/proto/v1"
@@ -29,6 +32,52 @@ type Function struct {
 	v1.UnimplementedFunctionRunnerServiceServer
 
 	log logging.Logger
+}
+
+// getCELEnv lazily initializes the shared CEL environment on first use.
+var getCELEnv = sync.OnceValues(func() (*cel.Env, error) { //nolint:gochecknoglobals // lazy singleton
+	return cel.NewEnv(
+		cel.Types(&v1.State{}, &structpb.Struct{}),
+		cel.Variable("observed", cel.ObjectType("apiextensions.fn.proto.v1.State")),
+		cel.Variable("desired", cel.ObjectType("apiextensions.fn.proto.v1.State")),
+		cel.Variable("context", cel.ObjectType("google.protobuf.Struct")),
+	)
+})
+
+// evaluateCondition evaluates a CEL expression against the function request.
+func (f *Function) evaluateCondition(req *v1.RunFunctionRequest, condition string) (bool, error) {
+	env, err := getCELEnv()
+	if err != nil {
+		return false, errors.Wrap(err, "cannot create CEL environment")
+	}
+	ast, iss := env.Parse(condition)
+	if iss.Err() != nil {
+		return false, errors.Wrap(iss.Err(), "cannot parse CEL condition")
+	}
+	checked, iss := env.Check(ast)
+	if iss.Err() != nil {
+		return false, errors.Wrap(iss.Err(), "cannot type-check CEL condition")
+	}
+	if !checked.OutputType().IsExactType(cel.BoolType) && !checked.OutputType().IsExactType(cel.DynType) {
+		return false, errors.Errorf("CEL condition must return bool, got %s", checked.OutputType())
+	}
+	program, err := env.Program(checked)
+	if err != nil {
+		return false, errors.Wrap(err, "cannot compile CEL condition")
+	}
+	result, _, err := program.Eval(map[string]any{
+		"observed": req.GetObserved(),
+		"desired":  req.GetDesired(),
+		"context":  req.GetContext(),
+	})
+	if err != nil {
+		return false, errors.Wrap(err, "cannot evaluate CEL condition")
+	}
+	ret, ok := result.Value().(bool)
+	if !ok {
+		return false, errors.New("CEL condition result is not bool")
+	}
+	return ret, nil
 }
 
 const (
@@ -81,53 +130,67 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 		return rsp, nil
 	}
 
-	sequences := make([][]resource.Name, 0, len(in.Rules))
-	for _, rule := range in.Rules {
-		sequences = append(sequences, rule.Sequence)
-	}
 	usages := make(map[resource.Name]*resource.DesiredComposed)
 
-	for _, sequence := range sequences {
+	for _, rule := range in.Rules {
+		sequence := rule.Sequence
+
+		// Evaluate the optional CEL condition to determine if this sequence should be processed.
+		skipSequence := false
+		if rule.Condition != "" {
+			conditionMet, err := f.evaluateCondition(req, rule.Condition)
+			if err != nil {
+				response.Fatal(rsp, errors.Wrapf(err, "cannot evaluate condition %q for sequence %v", rule.Condition, sequence))
+				return rsp, nil
+			}
+			if !conditionMet {
+				f.log.Debug("Skipping sequence due to false condition", "condition", rule.Condition, "sequence", sequence)
+				response.Normal(rsp, fmt.Sprintf("Skipping sequence %v: condition %q evaluated to false", sequence, rule.Condition))
+				skipSequence = true
+			}
+		}
+
+		// Generate Usages for all already-observed resource pairs in this sequence.
+		// This runs before checking skipSequence so that deletion order is preserved
+		// even when the sequence condition evaluates to false.
+		// Safe to run early: it only touches resources in observedComposed, while the
+		// creation-sequencing loop below only removes not-yet-observed resources from desiredComposed.
+		if in.EnableDeletionSequencing {
+			if err := f.generateObservedUsages(sequence, observedComposed, desiredComposed, usages, in.ReplayDeletion, in.UsageVersion); err != nil {
+				response.Fatal(rsp, errors.Wrap(err, "cannot generate usages for sequence"))
+				return rsp, err
+			}
+		}
+
+		if skipSequence {
+			continue
+		}
+
+		// Creation sequencing: for each resource in the sequence (after the first),
+		// check that all predecessor resources exist and are ready before allowing creation.
 		for i, r := range sequence {
 			if i == 0 {
 				// We don't need to do anything for the first resource in the sequence.
 				continue
 			}
+			// Already exists in the cluster, no creation sequencing needed.
 			if _, created := observedComposed[r]; created {
-				f.log.Debug("Processing ", "r:", r)
-				if in.EnableDeletionSequencing {
-					of := sequence[i-1]
-					ofRegex, err := getStrictRegex(string(of))
-					if err != nil {
-						response.Fatal(rsp, errors.Wrapf(err, "cannot compile regex %s", of))
-						return rsp, nil
-					}
-					for k := range desiredComposed {
-						if ofRegex.MatchString(string(k)) {
-							if _, ok := observedComposed[k]; ok {
-								f.log.Debug("Generate Usage", "of:", k, "by r:", r)
-								usage := GenerateUsage(&observedComposed[k].Resource.Unstructured, &observedComposed[r].Resource.Unstructured, in.ReplayDeletion, in.UsageVersion)
-								usageComposed := composed.New()
-								if err := convertViaJSON(usageComposed, usage); err != nil {
-									response.Fatal(rsp, errors.Wrapf(err, "cannot convert to JSON %s", usage))
-									return rsp, err
-								}
-								f.log.Debug("created usage", "kind", usageComposed.GetKind(), "name", usageComposed.GetName(), "namespace", usageComposed.GetNamespace())
-								usages[r+"-"+k+"-usage"] = &resource.DesiredComposed{Resource: usageComposed, Ready: resource.ReadyTrue}
-							}
-						}
-					}
-				}
-				// We've already created this resource, so we don't need to do anything.
-				// We only sequence creation of resources that don't exist yet.
+				f.log.Debug("Skipping already created resource", "r:", r)
 				continue
 			}
-			for b, before := range sequence[:i] {
+			// DeleteOnly rules only generate usages (handled above), never block creation.
+			if rule.DeleteOnly {
+				f.log.Debug("Skipping resource creation due to deleteOnly rule", "r:", r)
+				continue
+			}
+			// Check each predecessor in the sequence to see if it exists and is ready.
+			for _, before := range sequence[:i] {
 				beforeRegex, err := getStrictRegex(string(before))
 				if err != nil {
 					response.Fatal(rsp, errors.Wrapf(err, "cannot compile regex %s", before))
 					return rsp, nil
 				}
+				// Collect all desired resources matching the predecessor pattern.
 				keys := []resource.Name{}
 				for k := range desiredComposed {
 					if beforeRegex.MatchString(string(k)) {
@@ -152,6 +215,7 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 					return rsp, nil
 				}
 
+				// Predecessor not ready: delay creation by removing the current resource from desired.
 				if desired == 0 || desired != readyResources {
 					// no resource created
 					msg := fmt.Sprintf("Delaying creation of resource(s) matching %q because %q does not exist yet", r, before)
@@ -176,42 +240,61 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 							}
 							delete(desiredComposed, k)
 							if in.ResetCompositeReadiness {
-								// Reset the composite ready indicator to false when a desired resource is deleted.
 								rsp.Desired.Composite.Ready = v1.Ready_READY_FALSE
 							}
 						}
 					}
 					break
 				}
-				// Only create Usages of the previous (i-1) resource in the sequence.
-				if b == i-1 && in.EnableDeletionSequencing {
-					for c, o := range observedComposed {
-						if currentRegex.MatchString(string(c)) && !isUsage(o, in.UsageVersion) {
-							for _, k := range keys {
-								obs, ok := observedComposed[k]
-								if !ok {
-									f.log.Debug("Skipping usage; before-resource not yet observed", "k:", k, "by c:", c)
-									continue
-								}
-								f.log.Debug("Generate Usage of ", "k:", k, "by c:", c)
-								usage := GenerateUsage(&obs.Resource.Unstructured, &o.Resource.Unstructured, in.ReplayDeletion, in.UsageVersion)
-								usageComposed := composed.New()
-								if err := convertViaJSON(usageComposed, usage); err != nil {
-									response.Fatal(rsp, errors.Wrapf(err, "cannot convert to JSON %s", usage))
-									return rsp, err
-								}
-								f.log.Debug("created usage", "kind", usageComposed.GetKind(), "name", usageComposed.GetName(), "namespace", usageComposed.GetNamespace())
-								usages[c+"-"+k+"-usage"] = &resource.DesiredComposed{Resource: usageComposed, Ready: resource.ReadyTrue}
-							}
-						}
+			}
+		}
+	}
+	// Merge generated usages into desired resources before returning.
+	maps.Copy(desiredComposed, usages)
+	rsp.Desired.Resources = nil
+	return rsp, response.SetDesiredComposedResources(rsp, desiredComposed)
+}
+
+// generateObservedUsages creates Usage/ClusterUsage resources for observed resources in a sequence,
+// ensuring deletion order is preserved.
+func (f *Function) generateObservedUsages(
+	sequence []resource.Name,
+	observedComposed map[resource.Name]resource.ObservedComposed,
+	desiredComposed map[resource.Name]*resource.DesiredComposed,
+	usages map[resource.Name]*resource.DesiredComposed,
+	replayDeletion bool,
+	usageVersion v1beta1.UsageVersion,
+) error {
+	for i := 1; i < len(sequence); i++ {
+		rRegex, err := getStrictRegex(string(sequence[i]))
+		if err != nil {
+			return errors.Wrapf(err, "cannot compile regex %s", sequence[i])
+		}
+		ofRegex, err := getStrictRegex(string(sequence[i-1]))
+		if err != nil {
+			return errors.Wrapf(err, "cannot compile regex %s", sequence[i-1])
+		}
+		for c, o := range observedComposed {
+			if !rRegex.MatchString(string(c)) || isUsage(o, usageVersion) {
+				continue
+			}
+			for k := range desiredComposed {
+				if !ofRegex.MatchString(string(k)) {
+					continue
+				}
+				if obs, ok := observedComposed[k]; ok {
+					f.log.Debug("Generate Usage for observed resource", "of:", k, "by:", c)
+					usage := GenerateUsage(&obs.Resource.Unstructured, &o.Resource.Unstructured, replayDeletion, usageVersion)
+					usageComposed := composed.New()
+					if err := convertViaJSON(usageComposed, usage); err != nil {
+						return errors.Wrapf(err, "cannot convert to JSON %s", usage)
 					}
+					usages[c+"-"+k+"-usage"] = &resource.DesiredComposed{Resource: usageComposed, Ready: resource.ReadyTrue}
 				}
 			}
 		}
 	}
-	maps.Copy(desiredComposed, usages)
-	rsp.Desired.Resources = nil
-	return rsp, response.SetDesiredComposedResources(rsp, desiredComposed)
+	return nil
 }
 
 func getStrictRegex(pattern string) (*regexp.Regexp, error) {
