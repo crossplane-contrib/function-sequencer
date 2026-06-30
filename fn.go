@@ -135,6 +135,11 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 	for _, rule := range in.Rules {
 		sequence := rule.Sequence
 
+		if rule.DeleteOnly && rule.CreateOnly {
+			response.Fatal(rsp, errors.Errorf("rule for sequence %v cannot have both deleteOnly and createOnly set to true", sequence))
+			return rsp, nil
+		}
+
 		// Evaluate the optional CEL condition to determine if this sequence should be processed.
 		skipSequence := false
 		if rule.Condition != "" {
@@ -155,7 +160,8 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 		// even when the sequence condition evaluates to false.
 		// Safe to run early: it only touches resources in observedComposed, while the
 		// creation-sequencing loop below only removes not-yet-observed resources from desiredComposed.
-		if in.EnableDeletionSequencing {
+		// CreateOnly rules skip usage generation entirely (they only enforce creation ordering).
+		if in.EnableDeletionSequencing && !rule.CreateOnly {
 			if err := f.generateObservedUsages(sequence, observedComposed, desiredComposed, usages, in.ReplayDeletion, in.UsageVersion); err != nil {
 				response.Fatal(rsp, errors.Wrap(err, "cannot generate usages for sequence"))
 				return rsp, err
