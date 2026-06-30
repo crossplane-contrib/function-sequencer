@@ -2519,14 +2519,14 @@ func TestRunFunction(t *testing.T) {
 					Observed: &v1.State{
 						Composite: &v1.Resource{Resource: resource.MustStructJSON(xr)},
 						Resources: map[string]*v1.Resource{
-							"first": {Resource: resource.MustStructJSON(xr)},
+							"first":  {Resource: resource.MustStructJSON(xr)},
 							"second": {Resource: resource.MustStructJSON(mr)},
 						},
 					},
 					Desired: &v1.State{
 						Composite: &v1.Resource{Resource: resource.MustStructJSON(xr)},
 						Resources: map[string]*v1.Resource{
-							"first": {Resource: resource.MustStructJSON(xr), Ready: v1.Ready_READY_TRUE},
+							"first":  {Resource: resource.MustStructJSON(xr), Ready: v1.Ready_READY_TRUE},
 							"second": {Resource: resource.MustStructJSON(mr), Ready: v1.Ready_READY_TRUE},
 						},
 					},
@@ -2538,7 +2538,7 @@ func TestRunFunction(t *testing.T) {
 					Desired: &v1.State{
 						Composite: &v1.Resource{Resource: resource.MustStructJSON(xr)},
 						Resources: map[string]*v1.Resource{
-							"first": {Resource: resource.MustStructJSON(xr), Ready: v1.Ready_READY_TRUE},
+							"first":  {Resource: resource.MustStructJSON(xr), Ready: v1.Ready_READY_TRUE},
 							"second": {Resource: resource.MustStructJSON(mr), Ready: v1.Ready_READY_TRUE},
 						},
 					},
