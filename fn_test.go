@@ -2502,6 +2502,95 @@ func TestRunFunction(t *testing.T) {
 				},
 			},
 		},
+		"CreateOnlyBlocksCreationButSkipsUsages": {
+			reason: "createOnly=true still blocks creation when predecessors not ready, but generates no Usages even with enableDeletionSequencing=true",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence:   []resource.Name{"first", "second"},
+								CreateOnly: true,
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{Resource: resource.MustStructJSON(xr)},
+						Resources: map[string]*v1.Resource{
+							"first": {Resource: resource.MustStructJSON(xr)},
+							"second": {Resource: resource.MustStructJSON(mr)},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{Resource: resource.MustStructJSON(xr)},
+						Resources: map[string]*v1.Resource{
+							"first": {Resource: resource.MustStructJSON(xr), Ready: v1.Ready_READY_TRUE},
+							"second": {Resource: resource.MustStructJSON(mr), Ready: v1.Ready_READY_TRUE},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Desired: &v1.State{
+						Composite: &v1.Resource{Resource: resource.MustStructJSON(xr)},
+						Resources: map[string]*v1.Resource{
+							"first": {Resource: resource.MustStructJSON(xr), Ready: v1.Ready_READY_TRUE},
+							"second": {Resource: resource.MustStructJSON(mr), Ready: v1.Ready_READY_TRUE},
+						},
+					},
+				},
+			},
+		},
+		"CreateOnlyAndDeleteOnlyMutuallyExclusive": {
+			reason: "Both createOnly and deleteOnly set returns fatal error",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						Rules: []v1beta1.SequencingRule{
+							{
+								Sequence:   []resource.Name{"first", "second"},
+								CreateOnly: true,
+								DeleteOnly: true,
+							},
+						},
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{Resource: resource.MustStructJSON(xr)},
+						Resources: map[string]*v1.Resource{},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{Resource: resource.MustStructJSON(xr)},
+						Resources: map[string]*v1.Resource{
+							"first":  {Resource: resource.MustStructJSON(mr)},
+							"second": {Resource: resource.MustStructJSON(mr)},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta: &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{
+						{
+							Severity: v1.Severity_SEVERITY_FATAL,
+							Message:  `rule for sequence [first second] cannot have both deleteOnly and createOnly set to true`,
+							Target:   &target,
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{Resource: resource.MustStructJSON(xr)},
+						Resources: map[string]*v1.Resource{
+							"first":  {Resource: resource.MustStructJSON(mr)},
+							"second": {Resource: resource.MustStructJSON(mr)},
+						},
+					},
+				},
+			},
+		},
 		"DeleteOnlyGeneratesUsages": {
 			reason: "With deleteOnly=true and enableDeletionSequencing=true, Usage resources should still be created for observed resources",
 			args: args{

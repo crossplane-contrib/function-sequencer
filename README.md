@@ -193,6 +193,34 @@ The `deleteOnly` flag is per-rule, so you can mix creation-sequenced and delete-
           deleteOnly: true
 ```
 
+## Create-Only Mode
+
+The inverse of `deleteOnly`. When `createOnly` is set to `true` on a rule, creation sequencing is enforced as normal,
+but no `Usage`/`ClusterUsage` resources are generated for that rule — even when `enableDeletionSequencing` is enabled.
+
+This is useful when you need strict creation ordering but don't care about deletion ordering for a particular sequence.
+
+```yaml
+  - step: sequence-creation-only
+    functionRef:
+      name: function-sequencer
+    input:
+      apiVersion: sequencer.fn.crossplane.io/v1beta1
+      kind: Input
+      enableDeletionSequencing: true
+      rules:
+        - sequence:
+          - vpc
+          - subnet
+          - security-group
+          createOnly: true
+```
+
+In the example above, `subnet` waits for `vpc` and `security-group` waits for `subnet` before being created.
+On deletion, resources are deleted without ordering constraints.
+
+> **Note:** `createOnly` and `deleteOnly` are mutually exclusive on the same rule, setting both options ends up in error.
+
 ## Conditional Sequences
 
 Rules can include a `condition` field containing a [CEL](https://github.com/google/cel-spec) (Common Expression Language) expression.
