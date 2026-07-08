@@ -14,6 +14,7 @@ import (
 // It is a KRM-like object, so we generate a CRD to describe its schema.
 
 // SequencingRule is a rule that describes a sequence of resources.
+// +kubebuilder:validation:XValidation:rule="!(self.createOnly && self.deleteOnly)",message="createOnly and deleteOnly are mutually exclusive"
 type SequencingRule struct {
 	// TODO: Should we add a way to infer sequencing from usages? e.g. InferFromUsages: true
 	// InferFromUsages bool            `json:"inferFromUsages,omitempty"`
@@ -25,8 +26,15 @@ type SequencingRule struct {
 	// +optional
 	Condition string `json:"condition,omitempty"`
 
+	// CreateOnly skips deletion sequencing for this rule.
+	// Creation ordering is still enforced, but no Usage/ClusterUsage resources are generated even when enableDeletionSequencing is true.
+	// Mutually exclusive with DeleteOnly.
+	// +optional
+	CreateOnly bool `json:"createOnly,omitempty"`
+
 	// DeleteOnly skips creation sequencing for this rule.
 	// Resources are not blocked from creation; only deletion ordering (via Usage/ClusterUsage) is enforced when enableDeletionSequencing is true.
+	// Mutually exclusive with CreateOnly.
 	// +optional
 	DeleteOnly bool `json:"deleteOnly,omitempty"`
 
