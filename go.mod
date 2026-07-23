@@ -10,7 +10,7 @@ require (
 	github.com/google/cel-go v0.29.2
 	github.com/google/go-cmp v0.7.0
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
-	k8s.io/apimachinery v0.36.2
+	k8s.io/apimachinery v0.36.3
 	sigs.k8s.io/controller-tools v0.21.0
 )
 
