@@ -1,6 +1,6 @@
 module github.com/crossplane/function-sequencer
 
-go 1.25.11
+go 1.26.10
 
 require (
 	github.com/alecthomas/kong v1.15.0
