@@ -1,6 +1,6 @@
 module github.com/crossplane/function-sequencer
 
-go 1.26.4
+go 1.26.10
 
 require (
 	cel.dev/cel-go v0.32.0
