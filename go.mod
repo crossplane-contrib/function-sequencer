@@ -3,7 +3,7 @@ module github.com/crossplane/function-sequencer
 go 1.26.10
 
 require (
-	cel.dev/cel-go v0.33.0
+	cel.dev/cel-go v0.33.2
 	github.com/alecthomas/kong v1.16.1
 	github.com/crossplane/crossplane-runtime/v2 v2.4.3
 	github.com/crossplane/crossplane/apis/v2 v2.4.3
