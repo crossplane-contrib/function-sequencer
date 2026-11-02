@@ -88,11 +88,8 @@ const (
 )
 
 const (
-	DependencyReason         = "dependency"
 	ProtectionGroupVersion   = protectionv1beta1.Group + "/" + protectionv1beta1.Version
 	ProtectionV1GroupVersion = apiextensionsv1beta1.Group + "/" + apiextensionsv1beta1.Version
-	// UsageNameSuffix is the suffix applied when generating Usage names.
-	UsageNameSuffix = "dependency"
 	// V1ModeError Error when trying to protect a namespaced resource when in v1 mode.
 	V1ModeError = "cannot protect namespaced resource (kind: %s, name: %s, namespace: %s) with enableV1Mode=true. v1 usages only support cluster-scoped resources."
 )
@@ -321,24 +318,13 @@ func GenerateUsage(of, by *unstructured.Unstructured, rd bool, usageVersion v1be
 	return GenerateV2Usage(of, by, rd)
 }
 
-// GenerateV2Usage creates a v2 Usage for a resource.
+// GenerateV2Usage creates a v2 Usage for a resource. The name is left for
+// Crossplane to generate, so Usages for resources that differ only by API
+// group cannot collide.
 func GenerateV2Usage(of *unstructured.Unstructured, by *unstructured.Unstructured, rd bool) map[string]any {
-	name := strings.ToLower(by.GetKind() + "-" + by.GetName() + "-" + of.GetKind() + "-" + of.GetName())
-	usageType := protectionv1beta1.ClusterUsageKind
-	usageMeta := map[string]any{
-		"name": GenerateName(name, UsageNameSuffix),
-	}
-
-	namespace := of.GetNamespace()
-	if namespace != "" {
-		usageType = protectionv1beta1.UsageKind
-		usageMeta["namespace"] = namespace
-	}
-
 	usage := map[string]any{
 		"apiVersion": ProtectionGroupVersion,
-		"kind":       usageType,
-		"metadata":   usageMeta,
+		"kind":       protectionv1beta1.ClusterUsageKind,
 		"spec": map[string]any{
 			"by": map[string]any{
 				"apiVersion": by.GetAPIVersion(),
@@ -354,9 +340,13 @@ func GenerateV2Usage(of *unstructured.Unstructured, by *unstructured.Unstructure
 					"name": of.GetName(),
 				},
 			},
-			"reason":         DependencyReason,
 			"replayDeletion": rd,
 		},
+	}
+
+	if namespace := of.GetNamespace(); namespace != "" {
+		usage["kind"] = protectionv1beta1.UsageKind
+		usage["metadata"] = map[string]any{"namespace": namespace}
 	}
 	return usage
 }
@@ -364,13 +354,9 @@ func GenerateV2Usage(of *unstructured.Unstructured, by *unstructured.Unstructure
 // GenerateV1Usage creates a Crossplane v1 Usage for a resource.
 // Only Cluster Scoped Resources are supported.
 func GenerateV1Usage(of *unstructured.Unstructured, by *unstructured.Unstructured, rd bool) map[string]any {
-	name := strings.ToLower(by.GetKind() + "-" + by.GetName() + "-" + of.GetKind() + "-" + of.GetName())
 	usage := map[string]any{
 		"apiVersion": ProtectionV1GroupVersion,
 		"kind":       apiextensionsv1beta1.UsageKind,
-		"metadata": map[string]any{
-			"name": GenerateName(name, UsageNameSuffix),
-		},
 		"spec": map[string]any{
 			"by": map[string]any{
 				"apiVersion": by.GetAPIVersion(),
@@ -386,7 +372,6 @@ func GenerateV1Usage(of *unstructured.Unstructured, by *unstructured.Unstructure
 					"name": of.GetName(),
 				},
 			},
-			"reason":         DependencyReason,
 			"replayDeletion": rd,
 		},
 	}
