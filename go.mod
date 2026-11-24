@@ -1,6 +1,6 @@
 module github.com/crossplane/function-sequencer
 
-go 1.26.10
+go 1.26.11
 
 require (
 	cel.dev/cel-go v0.33.4
@@ -15,7 +15,7 @@ require (
 )
 
 require (
-	cel.dev/expr v0.25.2 // indirect
+	cel.dev/expr v0.25.3 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
