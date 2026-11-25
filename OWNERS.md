@@ -13,5 +13,6 @@ repository maintainers in their own `OWNERS.md` file.
 ## Maintainers
 * Hasan Turken <hasan@upbound.io> ([turkenh](https://github.com/turkenh))
 * Bob Haddleton <bob.haddleton@nokia.com> ([bobh66](https://github.com/bobh66))
+* Tobias Kässer <tobias.kasser@upbound.io> ([kaessert](https://github.com/kaessert))
 
 See [CODEOWNERS](./CODEOWNERS) for automatic PR assignment.
