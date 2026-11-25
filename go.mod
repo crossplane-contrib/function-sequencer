@@ -6,7 +6,7 @@ require (
 	cel.dev/cel-go v0.33.4
 	github.com/alecthomas/kong v1.17.0
 	github.com/crossplane/crossplane-runtime/v2 v2.5.0
-	github.com/crossplane/crossplane/apis/v2 v2.5.0-rc.0.0.20261029180807-76a72bee8a19
+	github.com/crossplane/crossplane/apis/v2 v2.5.0
 	github.com/crossplane/function-sdk-go v0.7.1
 	github.com/google/go-cmp v0.7.0
 	google.golang.org/protobuf v1.36.12
