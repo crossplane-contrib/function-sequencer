@@ -23,12 +23,17 @@ func TestRunFunction(t *testing.T) {
 		mr    = `{"apiVersion":"example.org/v1","kind":"MR","metadata":{"name":"cool-mr"}}`
 		nxr   = `{"apiVersion":"example.org/v1","kind":"XR","metadata":{"name":"cool-xr","namespace":"cool-namespace"},"spec":{"count":2}}`
 		nmr   = `{"apiVersion":"example.org/v1","kind":"MR","metadata":{"name":"cool-mr","namespace":"cool-namespace"}}`
-		uv1   = `{"apiVersion":"apiextensions.crossplane.io/v1beta1","kind":"Usage","metadata":{"name":"mr-cool-mr-xr-cool-xr-d9f469-dependency"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"XR","resourceRef":{"name":"cool-xr"}},"reason":"dependency","replayDeletion":true}}`
-		u2v1  = `{"apiVersion":"apiextensions.crossplane.io/v1beta1","kind":"Usage","metadata":{"name":"mr-cool-mr-mr-cool-mr-91201d-dependency"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"reason":"dependency","replayDeletion":true}}`
-		uv2   = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"ClusterUsage","metadata":{"name":"mr-cool-mr-xr-cool-xr-d9f469-dependency"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"XR","resourceRef":{"name":"cool-xr"}},"reason":"dependency","replayDeletion":true}}`
-		u2v2  = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"ClusterUsage","metadata":{"name":"mr-cool-mr-mr-cool-mr-91201d-dependency"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"reason":"dependency","replayDeletion":true}}`
-		nuv2  = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"Usage","metadata":{"name":"mr-cool-mr-xr-cool-xr-d9f469-dependency","namespace":"cool-namespace"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"XR","resourceRef":{"name":"cool-xr"}},"reason":"dependency","replayDeletion":true}}`
-		nu2v2 = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"Usage","metadata":{"name":"mr-cool-mr-mr-cool-mr-91201d-dependency","namespace":"cool-namespace"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"reason":"dependency","replayDeletion":true}}`
+		uv1   = `{"apiVersion":"apiextensions.crossplane.io/v1beta1","kind":"Usage","spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"XR","resourceRef":{"name":"cool-xr"}},"replayDeletion":true}}`
+		u2v1  = `{"apiVersion":"apiextensions.crossplane.io/v1beta1","kind":"Usage","spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"replayDeletion":true}}`
+		uv2   = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"ClusterUsage","spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"XR","resourceRef":{"name":"cool-xr"}},"replayDeletion":true}}`
+		u2v2  = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"ClusterUsage","spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"replayDeletion":true}}`
+		nuv2  = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"Usage","metadata":{"namespace":"cool-namespace"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"XR","resourceRef":{"name":"cool-xr"}},"replayDeletion":true}}`
+		nu2v2 = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"Usage","metadata":{"namespace":"cool-namespace"},"spec":{"by":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"of":{"apiVersion":"example.org/v1","kind":"MR","resourceRef":{"name":"cool-mr"}},"replayDeletion":true}}`
+
+		helmPC            = `{"apiVersion":"helm.crossplane.io/v1beta1","kind":"ProviderConfig","metadata":{"name":"default"}}`
+		kubernetesPC      = `{"apiVersion":"kubernetes.crossplane.io/v1alpha1","kind":"ProviderConfig","metadata":{"name":"default"}}`
+		helmPCUsage       = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"ClusterUsage","spec":{"by":{"apiVersion":"helm.crossplane.io/v1beta1","kind":"ProviderConfig","resourceRef":{"name":"default"}},"of":{"apiVersion":"example.org/v1","kind":"XR","resourceRef":{"name":"cool-xr"}},"replayDeletion":true}}`
+		kubernetesPCUsage = `{"apiVersion":"protection.crossplane.io/v1beta1","kind":"ClusterUsage","spec":{"by":{"apiVersion":"kubernetes.crossplane.io/v1alpha1","kind":"ProviderConfig","resourceRef":{"name":"default"}},"of":{"apiVersion":"example.org/v1","kind":"XR","resourceRef":{"name":"cool-xr"}},"replayDeletion":true}}`
 	)
 
 	target := v1.Target_TARGET_COMPOSITE
@@ -1261,6 +1266,93 @@ func TestRunFunction(t *testing.T) {
 							},
 							"second-first-usage": {
 								Resource: resource.MustStructJSON(uv2),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+		},
+		"UsagesForResourcesDifferingOnlyByAPIGroup": {
+			reason: "The function should not give Usages the same name when the using resources share a kind and name and differ only by API group",
+			args: args{
+				req: &v1.RunFunctionRequest{
+					Input: resource.MustStructObject(&v1beta1.Input{
+						EnableDeletionSequencing: true,
+						ReplayDeletion:           true,
+						Rules: []v1beta1.SequencingRule{
+							{Sequence: []resource.Name{"first", "helm-pc"}},
+							{Sequence: []resource.Name{"first", "kubernetes-pc"}},
+						},
+						UsageVersion: v1beta1.UsageV2,
+					}),
+					Observed: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"helm-pc": {
+								Resource: resource.MustStructJSON(helmPC),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"kubernetes-pc": {
+								Resource: resource.MustStructJSON(kubernetesPC),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"helm-pc": {
+								Resource: resource.MustStructJSON(helmPC),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"kubernetes-pc": {
+								Resource: resource.MustStructJSON(kubernetesPC),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+						},
+					},
+				},
+			},
+			want: want{
+				rsp: &v1.RunFunctionResponse{
+					Meta:    &v1.ResponseMeta{Ttl: durationpb.New(response.DefaultTTL)},
+					Results: []*v1.Result{},
+					Desired: &v1.State{
+						Composite: &v1.Resource{
+							Resource: resource.MustStructJSON(xr),
+						},
+						Resources: map[string]*v1.Resource{
+							"first": {
+								Resource: resource.MustStructJSON(xr),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"helm-pc": {
+								Resource: resource.MustStructJSON(helmPC),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"kubernetes-pc": {
+								Resource: resource.MustStructJSON(kubernetesPC),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"helm-pc-first-usage": {
+								Resource: resource.MustStructJSON(helmPCUsage),
+								Ready:    v1.Ready_READY_TRUE,
+							},
+							"kubernetes-pc-first-usage": {
+								Resource: resource.MustStructJSON(kubernetesPCUsage),
 								Ready:    v1.Ready_READY_TRUE,
 							},
 						},
