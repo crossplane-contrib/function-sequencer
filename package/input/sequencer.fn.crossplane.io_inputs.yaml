@@ -95,6 +95,13 @@ spec:
               - message: createOnly and deleteOnly are mutually exclusive
                 rule: '!(self.createOnly && self.deleteOnly)'
             type: array
+          stableCacheTTL:
+            description: |-
+              StableCacheTTL optionally extends cacheTTL when the composite and all
+              desired resources are observed, ready, and not being deleted. Pending
+              changes and sequencing keep cacheTTL. Must be greater than a positive
+              cacheTTL. Other pipeline functions can still impose a shorter TTL.
+            type: string
           usageVersion:
             description: UsageVersion specifies the version of Usage/ClusterUsage
               resource to be created.

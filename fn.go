@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -115,6 +116,19 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 			return rsp, nil
 		}
 		rsp.Meta.Ttl = durationpb.New(dur)
+	}
+	var stableTTL time.Duration
+	if in.StableCacheTTL != "" {
+		var err error
+		stableTTL, err = time.ParseDuration(in.StableCacheTTL)
+		if err != nil {
+			response.Fatal(rsp, errors.Wrap(err, "cannot set stableCacheTTL"))
+			return rsp, nil
+		}
+		if rsp.GetMeta().GetTtl().AsDuration() <= 0 || stableTTL <= rsp.GetMeta().GetTtl().AsDuration() {
+			response.Fatal(rsp, errors.New("stableCacheTTL must be greater than a positive cacheTTL"))
+			return rsp, nil
+		}
 	}
 
 	//  Get the desired composed resources from the request.
@@ -257,8 +271,128 @@ func (f *Function) RunFunction(_ context.Context, req *v1.RunFunctionRequest) (*
 	}
 	// Merge generated usages into desired resources before returning.
 	maps.Copy(desiredComposed, usages)
+	if stableTTL > 0 && isStable(req, in, desiredComposed, observedComposed) {
+		rsp.Meta.Ttl = durationpb.New(stableTTL)
+	}
 	rsp.Desired.Resources = nil
 	return rsp, response.SetDesiredComposedResources(rsp, desiredComposed)
+}
+
+// isStable checks both the incoming desired state and the resulting resource
+// graph so withheld creations and pending deletions retain the active TTL.
+func isStable(req *v1.RunFunctionRequest, in *v1beta1.Input, desired map[resource.Name]*resource.DesiredComposed, observed map[resource.Name]resource.ObservedComposed) bool {
+	xr, err := request.GetObservedCompositeResource(req)
+	if err != nil || !observedReady(&xr.Resource.Unstructured, false) || req.GetDesired().GetComposite().GetReady() == v1.Ready_READY_FALSE {
+		return false
+	}
+	if hasPendingDeletion(in, desired, observed) {
+		return false
+	}
+	for name := range req.GetDesired().GetResources() {
+		if _, ok := observed[resource.Name(name)]; !ok {
+			return false
+		}
+	}
+	for name, d := range desired {
+		o, ok := observed[name]
+		if !ok || d.Ready == resource.ReadyFalse || !observedReady(&o.Resource.Unstructured, d.Ready == resource.ReadyTrue) {
+			return false
+		}
+		if !desiredFieldsMatch(d.Resource.Object, o.Resource.Object) {
+			return false
+		}
+	}
+	return true
+}
+
+// Resources produced by later pipeline steps are not in our desired state.
+// Only a missing sequence member or an actual deletion signals pending teardown.
+func hasPendingDeletion(in *v1beta1.Input, desired map[resource.Name]*resource.DesiredComposed, observed map[resource.Name]resource.ObservedComposed) bool {
+	for name, o := range observed {
+		if o.Resource.GetDeletionTimestamp() != nil {
+			return true
+		}
+		if _, ok := desired[name]; ok || isUsage(o, in.UsageVersion) {
+			continue
+		}
+		for _, rule := range in.Rules {
+			for _, pattern := range rule.Sequence {
+				re, err := getStrictRegex(string(pattern))
+				if err != nil || re.MatchString(string(name)) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// observedReady accepts explicit readiness for resources without a Ready
+// condition, but never overrides a failed or stale Ready/Synced condition.
+func observedReady(obj *unstructured.Unstructured, ready bool) bool {
+	if obj.GetDeletionTimestamp() != nil {
+		return false
+	}
+	currentGeneration, _, err := unstructured.NestedNumberAsFloat64(obj.Object, "metadata", "generation")
+	if err != nil {
+		return false
+	}
+	conditions, _, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
+	if err != nil {
+		return false
+	}
+	for _, value := range conditions {
+		condition, ok := value.(map[string]any)
+		if !ok {
+			return false
+		}
+		if condition["type"] != "Ready" && condition["type"] != "Synced" {
+			continue
+		}
+		if condition["status"] != "True" {
+			return false
+		}
+		generation, _, err := unstructured.NestedNumberAsFloat64(condition, "observedGeneration")
+		if err != nil || (generation > 0 && generation < currentGeneration) {
+			return false
+		}
+		if condition["type"] == "Ready" {
+			ready = true
+		}
+	}
+	return ready
+}
+
+// desiredFieldsMatch tolerates fields added by API defaulting or controllers.
+// Lists are compared in order; uncertainty keeps the shorter active TTL.
+func desiredFieldsMatch(desired, observed any) bool {
+	switch d := desired.(type) {
+	case map[string]any:
+		o, ok := observed.(map[string]any)
+		if !ok {
+			return false
+		}
+		for key, value := range d {
+			other, exists := o[key]
+			if !exists || !desiredFieldsMatch(value, other) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		o, ok := observed.([]any)
+		if !ok || len(d) != len(o) {
+			return false
+		}
+		for i, value := range d {
+			if !desiredFieldsMatch(value, o[i]) {
+				return false
+			}
+		}
+		return true
+	default:
+		return reflect.DeepEqual(desired, observed)
+	}
 }
 
 // generateObservedUsages creates Usage/ClusterUsage resources for observed resources in a sequence,
