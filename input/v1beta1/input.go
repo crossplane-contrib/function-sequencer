@@ -68,6 +68,13 @@ type Input struct {
 	// +kubebuilder:default:="1m"
 	CacheTTL string `json:"cacheTTL,omitempty"`
 
+	// StableCacheTTL optionally extends cacheTTL when the composite and all
+	// desired resources are observed, ready, and not being deleted. Pending
+	// changes and sequencing keep cacheTTL. Must be greater than a positive
+	// cacheTTL. Other pipeline functions can still impose a shorter TTL.
+	// +optional
+	StableCacheTTL string `json:"stableCacheTTL,omitempty"`
+
 	// EnableDeletionSequencing controls the automatic creation of Usage/ClusterUsage resources from the dependency tree
 	// defined by the rule sequences.
 	// +kubebuilder:object:default=false
